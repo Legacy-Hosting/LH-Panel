@@ -1,0 +1,15 @@
+{
+  "name": "lh-panel",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "packageManager": "pnpm@12.4.1",
+  "engines": {
+    "node": ">=22.22.1 <23",
+    "npm": ">=9.2.0",
+    "pnpm": ">=12.4.1"
+  },
+  "scripts": { "dev": "vite", "build": "vite build", "preview": "vite preview" },
+  "dependencies": { "@vitejs/plugin-react": "latest", "vite": "latest", "react": "latest", "react-dom": "latest", "lucide-react": "latest" },
+  "devDependencies": {}
+}
