@@ -142,7 +142,7 @@ test("desktop shell keeps navigation and footer visible", async ({ page }, testI
   test.skip(testInfo.project.name !== "desktop-chromium", "desktop only");
   await expect(page.locator("aside")).toBeVisible();
   await expect(page.locator("footer")).toBeVisible();
-  await expect(page.getByText("LH-Panel v1.0.8")).toBeVisible();
+  await expect(page.getByText("LH-Panel v1.0.9")).toBeVisible();
   await expect(page.getByRole("button", { name: "New application" })).toBeVisible();
   const overflow = await page
     .locator("body")

@@ -172,6 +172,8 @@ function App() {
   }, [selectedTeam?.id]);
   useEffect(() => {
     loadDashboard();
+    const timer = window.setInterval(loadDashboard, 30_000);
+    return () => window.clearInterval(timer);
   }, [loadDashboard]);
   async function applicationAction(applicationId, action) {
     try {

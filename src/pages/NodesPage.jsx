@@ -43,6 +43,8 @@ export function NodesPage() {
 
   useEffect(() => {
     load();
+    const timer = window.setInterval(load, 10_000);
+    return () => window.clearInterval(timer);
   }, []);
 
   useEffect(() => {
