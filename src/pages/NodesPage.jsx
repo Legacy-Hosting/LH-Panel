@@ -3,6 +3,7 @@ import {
   Copy,
   LoaderCircle,
   Plus,
+  Rocket,
   RotateCw,
   Server,
   Trash2,
@@ -27,6 +28,7 @@ export function NodesPage() {
     region: "",
   });
   const [agent, setAgent] = useState(null);
+  const [showAutoDeploy, setShowAutoDeploy] = useState(false);
   const [busy, setBusy] = useState("");
   const [error, setError] = useState("");
 
@@ -42,6 +44,15 @@ export function NodesPage() {
   useEffect(() => {
     load();
   }, []);
+
+  useEffect(() => {
+    if (!showAutoDeploy) return undefined;
+    const closeWithEscape = (event) => {
+      if (event.key === "Escape") setShowAutoDeploy(false);
+    };
+    window.addEventListener("keydown", closeWithEscape);
+    return () => window.removeEventListener("keydown", closeWithEscape);
+  }, [showAutoDeploy]);
 
   async function create(event) {
     event.preventDefault();
@@ -115,6 +126,15 @@ export function NodesPage() {
         .join("\n")
     : "";
 
+  async function copyText(value, successMessage) {
+    try {
+      await navigator.clipboard.writeText(value);
+      feedback.success(successMessage);
+    } catch {
+      feedback.error("Could not copy to the clipboard.");
+    }
+  }
+
   return (
     <div className="resource-page">
       <div className="resource-heading">
@@ -137,25 +157,104 @@ export function NodesPage() {
                 agent&apos;s protected .env file.
               </p>
             </div>
-            <button className="icon-btn" onClick={() => setAgent(null)}>
+            <button
+              className="icon-btn"
+              onClick={() => {
+                setShowAutoDeploy(false);
+                setAgent(null);
+              }}
+              aria-label="Close agent configuration"
+            >
               <X size={16} />
             </button>
           </div>
           <pre>{environmentText}</pre>
-          <button
-            className="secondary"
-            onClick={async () => {
-              try {
-                await navigator.clipboard.writeText(environmentText);
-                feedback.success("Agent environment copied.");
-              } catch {
-                feedback.error("Could not copy the agent environment.");
+          <div className="secret-actions">
+            <button
+              className="secondary"
+              onClick={() =>
+                copyText(environmentText, "Agent environment copied.")
               }
-            }}
-          >
-            <Copy size={15} /> Copy environment
-          </button>
+            >
+              <Copy size={15} /> Copy environment
+            </button>
+            <button
+              className="primary"
+              onClick={() => setShowAutoDeploy(true)}
+            >
+              <Rocket size={15} /> Auto deploy
+            </button>
+          </div>
         </section>
+      )}
+      {agent && showAutoDeploy && (
+        <div
+          className="modal-backdrop"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget) setShowAutoDeploy(false);
+          }}
+        >
+          <section
+            className="modal auto-deploy-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="auto-deploy-title"
+          >
+            <div className="modal-head">
+              <div>
+                <h2 id="auto-deploy-title">Auto deploy command</h2>
+                <p>Install and connect the Legacy Hosting agent.</p>
+              </div>
+              <button
+                type="button"
+                className="icon-btn"
+                onClick={() => setShowAutoDeploy(false)}
+                aria-label="Close auto deploy dialog"
+              >
+                <X size={17} />
+              </button>
+            </div>
+            <div className="deploy-type-block">
+              <b>Type</b>
+              <div className="deploy-type-options">
+                <button type="button" className="active">
+                  Standalone
+                </button>
+                <button
+                  type="button"
+                  disabled
+                  title="Docker support is planned"
+                >
+                  Docker <small>Planned</small>
+                </button>
+              </div>
+              <p>
+                Standalone installs the agent directly on a fresh Ubuntu node.
+              </p>
+            </div>
+            <div className="deploy-command-section">
+              <b>Run this command on the node:</b>
+              <div className="deploy-command">
+                <code>{agent.installCommand}</code>
+                <button
+                  type="button"
+                  onClick={() =>
+                    copyText(agent.installCommand, "Auto deploy command copied.")
+                  }
+                  aria-label="Copy auto deploy command"
+                  title="Copy command"
+                >
+                  <Copy size={18} />
+                </button>
+              </div>
+            </div>
+            <div className="deploy-warning">
+              The command contains the one-time node token. Run it as a
+              sudo-capable user on the intended server only, then remove it
+              from your shell history.
+            </div>
+          </section>
+        </div>
       )}
       {showForm && (
         <form className="settings-card node-form" onSubmit={create}>

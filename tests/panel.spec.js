@@ -12,6 +12,19 @@ const createdTeam = {
   slug: "legacy-hosting-apps-1234abcd",
   role: "owner",
 };
+const nodeAgent = {
+  nodeId: "66666666-6666-4666-8666-666666666666",
+  token: "abcdefghijklmnopqrstuvwxyzABCDEFGH12345678",
+  environment: {
+    LH_API_URL: "https://api.legacyhosting.xyz/api/v1",
+    LH_NODE_ID: "66666666-6666-4666-8666-666666666666",
+    LH_AGENT_TOKEN: "abcdefghijklmnopqrstuvwxyzABCDEFGH12345678",
+    LH_HEARTBEAT_INTERVAL_MS: "30000",
+    LH_COMMAND_POLL_INTERVAL_MS: "2000",
+  },
+  installCommand:
+    "curl -fsSL 'https://api.legacyhosting.xyz/api/v1/agent/install.sh' | sudo bash -s -- --api-url 'https://api.legacyhosting.xyz/api/v1' --node-id '66666666-6666-4666-8666-666666666666' --token 'abcdefghijklmnopqrstuvwxyzABCDEFGH12345678'",
+};
 
 async function mockApi(page) {
   let teamName = team.name;
@@ -38,6 +51,14 @@ async function mockApi(page) {
         status: 201,
         contentType: "application/json",
         body: JSON.stringify({ data: newTeam }),
+      });
+      return;
+    }
+    if (path === "/api/v1/panel/nodes" && request.method() === "POST") {
+      await route.fulfill({
+        status: 201,
+        contentType: "application/json",
+        body: JSON.stringify({ data: { agent: nodeAgent } }),
       });
       return;
     }
@@ -121,7 +142,7 @@ test("desktop shell keeps navigation and footer visible", async ({ page }, testI
   test.skip(testInfo.project.name !== "desktop-chromium", "desktop only");
   await expect(page.locator("aside")).toBeVisible();
   await expect(page.locator("footer")).toBeVisible();
-  await expect(page.getByText("LH-Panel v1.0.7")).toBeVisible();
+  await expect(page.getByText("LH-Panel v1.0.8")).toBeVisible();
   await expect(page.getByRole("button", { name: "New application" })).toBeVisible();
   const overflow = await page
     .locator("body")
@@ -293,4 +314,17 @@ test("nodes accept public and private FQDN, IPv4, and IPv6", async ({
   await expect(
     page.getByRole("status").filter({ hasText: "ams3-web-02 was created" }),
   ).toBeVisible();
+
+  await page.getByRole("button", { name: "Auto deploy" }).click();
+  const dialog = page.getByRole("dialog", { name: "Auto deploy command" });
+  await expect(dialog).toBeVisible();
+  await expect(dialog.getByText(nodeAgent.installCommand)).toBeVisible();
+  await expect(dialog.getByRole("button", { name: /Docker/ })).toBeDisabled();
+  await expect(
+    dialog.getByRole("button", { name: "Copy auto deploy command" }),
+  ).toBeVisible();
+  const dialogOverflow = await dialog.evaluate(
+    (element) => element.scrollWidth - element.clientWidth,
+  );
+  expect(dialogOverflow).toBeLessThanOrEqual(1);
 });
