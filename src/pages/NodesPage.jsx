@@ -9,8 +9,10 @@ import {
   X,
 } from "lucide-react";
 import { panelApi } from "../api/client.js";
+import { useFeedback } from "../components/FeedbackProvider.jsx";
 
 export function NodesPage() {
+  const feedback = useFeedback();
   const [nodes, setNodes] = useState([]);
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState({
@@ -49,47 +51,51 @@ export function NodesPage() {
       });
       setAgent(response.data.agent);
       setShowForm(false);
+      feedback.success(`${form.name} was created.`);
       await load();
     } catch (caught) {
-      setError(caught.message || "Could not create node");
+      feedback.error(caught.message || "Could not create node");
     } finally {
       setBusy("");
     }
   }
 
   async function rotate(node) {
-    if (
-      !window.confirm(
-        `Rotate the agent token for ${node.name}? The existing agent will disconnect immediately.`,
-      )
-    )
-      return;
+    const approved = await feedback.confirm({
+      title: `Rotate token for ${node.name}?`,
+      message: "The existing agent will disconnect immediately.",
+      confirmLabel: "Rotate token",
+      tone: "warning",
+    });
+    if (!approved) return;
     setBusy(node.id);
     setError("");
     try {
       const response = await panelApi.rotateNodeToken(node.id);
       setAgent(response.data);
+      feedback.warning(`Agent token for ${node.name} was rotated.`);
     } catch (caught) {
-      setError(caught.message || "Could not rotate node token");
+      feedback.error(caught.message || "Could not rotate node token");
     } finally {
       setBusy("");
     }
   }
 
   async function remove(node) {
-    if (
-      !window.confirm(
-        `Delete node ${node.name}? This only works when no applications use it.`,
-      )
-    )
-      return;
+    const approved = await feedback.confirm({
+      title: `Delete ${node.name}?`,
+      message: "The node can only be deleted when no applications use it.",
+      confirmLabel: "Delete node",
+    });
+    if (!approved) return;
     setBusy(node.id);
     setError("");
     try {
       await panelApi.deleteNode(node.id);
+      feedback.success(`${node.name} was deleted.`);
       await load();
     } catch (caught) {
-      setError(caught.message || "Could not delete node");
+      feedback.error(caught.message || "Could not delete node");
     } finally {
       setBusy("");
     }
@@ -130,7 +136,14 @@ export function NodesPage() {
           <pre>{environmentText}</pre>
           <button
             className="secondary"
-            onClick={() => navigator.clipboard.writeText(environmentText)}
+            onClick={async () => {
+              try {
+                await navigator.clipboard.writeText(environmentText);
+                feedback.success("Agent environment copied.");
+              } catch {
+                feedback.error("Could not copy the agent environment.");
+              }
+            }}
           >
             <Copy size={15} /> Copy environment
           </button>

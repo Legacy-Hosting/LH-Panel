@@ -1,8 +1,18 @@
 import { useEffect, useState } from "react";
-import { Copy, LoaderCircle, Mail, Plus, UserRound, Users } from "lucide-react";
+import {
+  Copy,
+  LoaderCircle,
+  Mail,
+  Plus,
+  Save,
+  UserRound,
+  Users,
+} from "lucide-react";
 import { panelApi } from "../api/client.js";
+import { useFeedback } from "../components/FeedbackProvider.jsx";
 
-export function TeamPage({ team }) {
+export function TeamPage({ team, onTeamUpdated }) {
+  const feedback = useFeedback();
   const [members, setMembers] = useState([]);
   const [invitations, setInvitations] = useState([]);
   const [form, setForm] = useState({
@@ -12,8 +22,11 @@ export function TeamPage({ team }) {
   });
   const [invitationUrl, setInvitationUrl] = useState("");
   const [busy, setBusy] = useState(false);
+  const [renameBusy, setRenameBusy] = useState(false);
+  const [teamName, setTeamName] = useState(team?.name || "");
   const [error, setError] = useState("");
-  const canInvite = team?.role === "owner" || team?.role === "administrator";
+  const canManage = team?.role === "owner" || team?.role === "administrator";
+  const canInvite = canManage;
 
   async function load() {
     if (!team) return;
@@ -32,6 +45,29 @@ export function TeamPage({ team }) {
     load();
   }, [team?.id]);
 
+  useEffect(() => {
+    setTeamName(team?.name || "");
+  }, [team?.id, team?.name]);
+
+  async function renameTeam(event) {
+    event.preventDefault();
+    const name = teamName.trim();
+    if (name.length < 2) {
+      feedback.warning("The team name must contain at least two characters.");
+      return;
+    }
+    setRenameBusy(true);
+    try {
+      await panelApi.updateTeam(team.id, { name });
+      await onTeamUpdated?.();
+      feedback.success(`Team renamed to ${name}.`);
+    } catch (caught) {
+      feedback.error(caught.message || "Could not update the team name");
+    } finally {
+      setRenameBusy(false);
+    }
+  }
+
   async function invite(event) {
     event.preventDefault();
     setBusy(true);
@@ -42,8 +78,9 @@ export function TeamPage({ team }) {
       setInvitationUrl(response.data.invitationUrl);
       setForm({ ...form, email: "" });
       await load();
+      feedback.success(`Invitation created for ${form.email}.`);
     } catch (caught) {
-      setError(caught.message || "Could not create invitation");
+      feedback.error(caught.message || "Could not create invitation");
     } finally {
       setBusy(false);
     }
@@ -61,6 +98,43 @@ export function TeamPage({ team }) {
         <span className="role-badge">Your role: {team.role}</span>
       </div>
       {error && <div className="data-error">{error}</div>}
+      {canManage && (
+        <form className="settings-card team-name-card" onSubmit={renameTeam}>
+          <div className="settings-card-head">
+            <div className="integration-icon access-icon">
+              <Users size={20} />
+            </div>
+            <div>
+              <h3>Workspace name</h3>
+              <p>Change the team name shown throughout the control panel.</p>
+            </div>
+          </div>
+          <div className="team-name-form">
+            <div className="auth-input">
+              <Users size={16} />
+              <input
+                required
+                minLength="2"
+                maxLength="120"
+                value={teamName}
+                onChange={(event) => setTeamName(event.target.value)}
+                aria-label="Team name"
+              />
+            </div>
+            <button
+              className="primary"
+              disabled={renameBusy || teamName.trim() === team.name}
+            >
+              {renameBusy ? (
+                <LoaderCircle className="spin" size={16} />
+              ) : (
+                <Save size={16} />
+              )}{" "}
+              Save name
+            </button>
+          </div>
+        </form>
+      )}
       {invitationUrl && (
         <section className="one-time-secret">
           <div className="secret-head">
@@ -72,7 +146,14 @@ export function TeamPage({ team }) {
           <pre>{invitationUrl}</pre>
           <button
             className="secondary"
-            onClick={() => navigator.clipboard.writeText(invitationUrl)}
+            onClick={async () => {
+              try {
+                await navigator.clipboard.writeText(invitationUrl);
+                feedback.success("Invitation link copied.");
+              } catch {
+                feedback.error("Could not copy the invitation link.");
+              }
+            }}
           >
             <Copy size={15} /> Copy invitation
           </button>

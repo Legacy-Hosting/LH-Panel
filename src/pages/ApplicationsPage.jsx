@@ -15,6 +15,7 @@ import {
   XCircle,
 } from "lucide-react";
 import { panelApi } from "../api/client.js";
+import { useFeedback } from "../components/FeedbackProvider.jsx";
 
 function displayDate(value) {
   if (!value) return "—";
@@ -37,6 +38,7 @@ export function ApplicationsPage({
   initialApplicationId,
   onApplicationSelect,
 }) {
+  const feedback = useFeedback();
   const [applications, setApplications] = useState([]);
   const [selectedId, setSelectedId] = useState(initialApplicationId || "");
   const [detail, setDetail] = useState(null);
@@ -44,7 +46,6 @@ export function ApplicationsPage({
   const [logStatus, setLogStatus] = useState("");
   const [busy, setBusy] = useState("");
   const [error, setError] = useState("");
-  const [notice, setNotice] = useState("");
   const [variable, setVariable] = useState({ key: "", value: "" });
   const streamController = useRef(null);
   const canMutate = ["owner", "administrator", "developer"].includes(
@@ -135,7 +136,9 @@ export function ApplicationsPage({
       ]);
     } catch (caught) {
       if (caught.name !== "AbortError")
-        setError(caught.message || "The command output stream was interrupted");
+        feedback.error(
+          caught.message || "The command output stream was interrupted",
+        );
     } finally {
       if (streamController.current === controller)
         streamController.current = null;
@@ -146,10 +149,9 @@ export function ApplicationsPage({
     if (!detail) return;
     setBusy(actionName);
     setError("");
-    setNotice("");
     try {
       const response = await panelApi.applicationAction(detail.id, actionName);
-      setNotice(`${label(actionName)} queued.`);
+      feedback.success(`${label(actionName)} queued for ${detail.name}.`);
       if (actionName === "deploy" && response.data.commandId) {
         setLogs("Waiting for deployment output…");
         setLogStatus("Queued");
@@ -159,7 +161,7 @@ export function ApplicationsPage({
         await Promise.all([loadApplications(detail.id), loadDetail(detail.id)]);
       }
     } catch (caught) {
-      setError(caught.message || "Could not queue application action");
+      feedback.error(caught.message || "Could not queue application action");
     } finally {
       setBusy("");
     }
@@ -175,50 +177,59 @@ export function ApplicationsPage({
       await followCommand(detail.id, queued.data.commandId);
     } catch (caught) {
       if (caught.name !== "AbortError")
-        setError(caught.message || "Could not load logs");
+        feedback.error(caught.message || "Could not load logs");
     } finally {
       setBusy("");
     }
   }
 
   async function rollback(deployment) {
-    if (
-      !detail ||
-      !window.confirm(
-        `Deploy commit ${deployment.commitSha.slice(0, 7)} again on ${detail.name}?`,
-      )
-    )
-      return;
+    if (!detail) return;
+    const revision = deployment.commitSha.slice(0, 7);
+    const approved = await feedback.confirm({
+      title: `Rollback ${detail.name}?`,
+      message: `Commit ${revision} will be deployed again.`,
+      confirmLabel: "Queue rollback",
+      tone: "warning",
+    });
+    if (!approved) return;
     setBusy(`rollback-${deployment.id}`);
     setError("");
     try {
       const response = await panelApi.rollbackApplication(detail.id, deployment.id);
-      setNotice(`Rollback to ${deployment.commitSha.slice(0, 7)} queued.`);
+      feedback.warning(`Rollback to ${revision} queued.`);
       setLogs("Waiting for rollback output…");
       setLogStatus("Queued");
       setBusy("");
       await followCommand(detail.id, response.data.commandId);
     } catch (caught) {
-      setError(caught.message || "Could not queue rollback");
+      feedback.error(caught.message || "Could not queue rollback");
     } finally {
       setBusy("");
     }
   }
 
   async function cancel(deployment) {
-    if (!window.confirm("Cancel this deployment?")) return;
+    const approved = await feedback.confirm({
+      title: "Cancel deployment?",
+      message:
+        "The running deployment will be asked to stop as soon as possible.",
+      confirmLabel: "Cancel deployment",
+      tone: "warning",
+    });
+    if (!approved) return;
     setBusy(`cancel-${deployment.id}`);
     setError("");
     try {
       const response = await panelApi.cancelDeployment(deployment.id);
-      setNotice(
+      feedback.warning(
         response.data.cancellationState === "cancelled"
           ? "Deployment cancelled."
           : "Cancellation requested from the node.",
       );
       await loadDetail(detail.id);
     } catch (caught) {
-      setError(caught.message || "Could not cancel deployment");
+      feedback.error(caught.message || "Could not cancel deployment");
     } finally {
       setBusy("");
     }
@@ -236,26 +247,36 @@ export function ApplicationsPage({
         variable.value,
       );
       setVariable({ key: "", value: "" });
-      setNotice("Environment variable saved. Restart or deploy to apply it.");
+      feedback.success(
+        "Environment variable saved. Restart or deploy to apply it.",
+      );
       await loadDetail(detail.id);
     } catch (caught) {
-      setError(caught.message || "Could not save environment variable");
+      feedback.error(caught.message || "Could not save environment variable");
     } finally {
       setBusy("");
     }
   }
 
   async function removeVariable(key) {
-    if (!detail || !window.confirm(`Delete environment variable ${key}?`))
-      return;
+    if (!detail) return;
+    const approved = await feedback.confirm({
+      title: `Delete ${key}?`,
+      message:
+        "The variable will be removed. Restart or deploy the application to apply the change.",
+      confirmLabel: "Delete variable",
+    });
+    if (!approved) return;
     setBusy(`environment-${key}`);
     setError("");
     try {
       await panelApi.deleteEnvironmentVariable(detail.id, key);
-      setNotice("Environment variable removed. Restart or deploy to apply it.");
+      feedback.success(
+        "Environment variable removed. Restart or deploy to apply it.",
+      );
       await loadDetail(detail.id);
     } catch (caught) {
-      setError(caught.message || "Could not remove environment variable");
+      feedback.error(caught.message || "Could not remove environment variable");
     } finally {
       setBusy("");
     }
@@ -264,7 +285,6 @@ export function ApplicationsPage({
   return (
     <div className="applications-page">
       {error && <div className="data-error">{error}</div>}
-      {notice && <div className="success-banner">{notice}</div>}
       <div className="applications-layout">
         <section className="application-browser">
           <div className="browser-heading">

@@ -8,8 +8,22 @@ const team = {
 };
 
 async function mockApi(page) {
+  let teamName = team.name;
   await page.route("http://localhost:8080/api/v1/**", async (route) => {
-    const path = new URL(route.request().url()).pathname;
+    const request = route.request();
+    const path = new URL(request.url()).pathname;
+    if (
+      path === `/api/v1/teams/${team.id}` &&
+      request.method() === "PATCH"
+    ) {
+      teamName = request.postDataJSON().name;
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({ data: { id: team.id, name: teamName } }),
+      });
+      return;
+    }
     const responses = {
       "/api/v1/auth/me": {
         data: {
@@ -17,7 +31,7 @@ async function mockApi(page) {
           email: "dj@example.com",
           displayName: "DJ Ang",
           isPlatformAdmin: true,
-          teams: [team],
+          teams: [{ ...team, name: teamName }],
         },
       },
       "/api/v1/panel/overview": {
@@ -128,5 +142,50 @@ test("logout sends a bodyless request without a JSON content type", async ({
   expect(request.headers()["content-type"]).toBeUndefined();
   await expect(
     page.getByRole("heading", { name: "Welcome back" }),
+  ).toBeVisible();
+});
+
+test("destructive actions use a centered confirmation and a toast", async ({
+  page,
+}) => {
+  await page.getByTitle("Delete application").click();
+
+  const dialog = page.getByRole("alertdialog");
+  await expect(dialog).toBeVisible();
+  await expect(dialog.getByRole("heading", { name: "Delete portal?" })).toBeVisible();
+
+  const dialogBox = await dialog.boundingBox();
+  const viewport = page.viewportSize();
+  expect(dialogBox).not.toBeNull();
+  expect(viewport).not.toBeNull();
+  expect(Math.abs(dialogBox.x + dialogBox.width / 2 - viewport.width / 2)).toBeLessThan(3);
+  expect(Math.abs(dialogBox.y + dialogBox.height / 2 - viewport.height / 2)).toBeLessThan(3);
+
+  await dialog.getByRole("button", { name: "Delete application" }).click();
+  const toast = page
+    .getByRole("status")
+    .filter({ hasText: "portal deletion queued" });
+  await expect(toast).toBeVisible();
+  const toastBox = await toast.boundingBox();
+  const expectedBottom = viewport.width <= 720 ? 112 : 66;
+  expect(toastBox).not.toBeNull();
+  expect(viewport.width - toastBox.x - toastBox.width).toBeLessThanOrEqual(18);
+  expect(
+    Math.abs(viewport.height - toastBox.y - toastBox.height - expectedBottom),
+  ).toBeLessThan(3);
+});
+
+test("team administrators can rename their workspace", async ({ page }) => {
+  await page.getByRole("link", { name: "Team" }).click();
+  await expect(page).toHaveURL(/\/team$/);
+
+  await page.getByRole("textbox", { name: "Team name" }).fill("Legacy Hosting");
+  await page.getByRole("button", { name: "Save name" }).click();
+
+  await expect(
+    page.getByRole("status").filter({ hasText: "Team renamed to Legacy Hosting" }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "Legacy Hosting", exact: true }).first(),
   ).toBeVisible();
 });

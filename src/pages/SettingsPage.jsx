@@ -1,6 +1,5 @@
 import { useEffect, useState } from "react";
 import {
-  CheckCircle2,
   Cloud,
   ExternalLink,
   GitBranch,
@@ -9,8 +8,10 @@ import {
   Users,
 } from "lucide-react";
 import { panelApi } from "../api/client.js";
+import { useFeedback } from "../components/FeedbackProvider.jsx";
 
 export function SettingsPage({ user }) {
+  const feedback = useFeedback();
   const [registration, setRegistration] = useState(null);
   const [cloudflare, setCloudflare] = useState([]);
   const [github, setGithub] = useState([]);
@@ -19,6 +20,27 @@ export function SettingsPage({ user }) {
   const integrationResult = new URLSearchParams(window.location.search).get(
     "integration",
   );
+
+  useEffect(() => {
+    if (!integrationResult) return;
+    const results = {
+      cloudflare_connected: ["success", "Cloudflare was connected successfully."],
+      cloudflare_failed: ["error", "Cloudflare could not be connected."],
+      cloudflare_denied: ["warning", "Cloudflare access was not approved."],
+      github_connected: ["success", "GitHub was connected successfully."],
+      github_failed: ["error", "GitHub could not be connected."],
+    };
+    const result = results[integrationResult];
+    if (result) feedback.notify(result[0], result[1]);
+
+    const url = new URL(window.location.href);
+    url.searchParams.delete("integration");
+    window.history.replaceState(
+      {},
+      "",
+      `${url.pathname}${url.search}${url.hash}`,
+    );
+  }, [feedback, integrationResult]);
 
   useEffect(() => {
     let active = true;
@@ -52,8 +74,9 @@ export function SettingsPage({ user }) {
     try {
       const response = await panelApi.updateRegistrationSettings(registration);
       setRegistration(response.data);
+      feedback.success("Registration settings saved.");
     } catch (caught) {
-      setError(caught.message || "Could not update registration");
+      feedback.error(caught.message || "Could not update registration");
     } finally {
       setBusy("");
     }
@@ -68,7 +91,7 @@ export function SettingsPage({ user }) {
       );
       window.location.assign(response.data.authorizationUrl);
     } catch (caught) {
-      setError(caught.message || "Could not start Cloudflare connection");
+      feedback.error(caught.message || "Could not start Cloudflare connection");
       setBusy("");
     }
   }
@@ -80,32 +103,13 @@ export function SettingsPage({ user }) {
       const response = await panelApi.githubConnect("/settings/integrations");
       window.location.assign(response.data.installationUrl);
     } catch (caught) {
-      setError(caught.message || "Could not start GitHub App installation");
+      feedback.error(caught.message || "Could not start GitHub App installation");
       setBusy("");
     }
   }
 
   return (
     <div className="settings-page">
-      {integrationResult === "cloudflare_connected" && (
-        <div className="success-banner">
-          <CheckCircle2 size={17} /> Cloudflare was connected successfully.
-        </div>
-      )}
-      {integrationResult === "cloudflare_failed" && (
-        <div className="data-error">Cloudflare could not be connected.</div>
-      )}
-      {integrationResult === "cloudflare_denied" && (
-        <div className="data-error">Cloudflare access was not approved.</div>
-      )}
-      {integrationResult === "github_connected" && (
-        <div className="success-banner">
-          <CheckCircle2 size={17} /> GitHub was connected successfully.
-        </div>
-      )}
-      {integrationResult === "github_failed" && (
-        <div className="data-error">GitHub could not be connected.</div>
-      )}
       {error && <div className="data-error">{error}</div>}
 
       <div className="settings-heading">

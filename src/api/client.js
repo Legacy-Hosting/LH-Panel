@@ -126,6 +126,11 @@ export const panelApi = {
       body: JSON.stringify(body),
     }),
   teams: () => request("/teams"),
+  updateTeam: (teamId, body) =>
+    request(`/teams/${teamId}`, {
+      method: "PATCH",
+      body: JSON.stringify(body),
+    }),
   acceptInvitation: (token) =>
     request("/teams/invitations/accept", {
       method: "POST",

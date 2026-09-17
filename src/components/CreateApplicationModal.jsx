@@ -9,6 +9,7 @@ import {
   X,
 } from "lucide-react";
 import { panelApi } from "../api/client.js";
+import { useFeedback } from "./FeedbackProvider.jsx";
 
 function metadata(value) {
   if (!value || typeof value === "object") return value || {};
@@ -36,6 +37,7 @@ function parseEnvironment(value) {
 }
 
 export function CreateApplicationModal({ open, onClose, onCreated }) {
+  const feedback = useFeedback();
   const [nodes, setNodes] = useState([]);
   const [repositories, setRepositories] = useState([]);
   const [zones, setZones] = useState([]);
@@ -105,9 +107,10 @@ export function CreateApplicationModal({ open, onClose, onCreated }) {
         environment: parseEnvironment(form.environment),
       });
       await onCreated();
+      feedback.success(`${form.name} was created and deployment was queued.`);
       onClose();
     } catch (caught) {
-      setError(caught.message || "Could not create application");
+      feedback.error(caught.message || "Could not create application");
     } finally {
       setBusy(false);
     }

@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import {
   BellRing,
-  CheckCircle2,
   Gauge,
   HeartPulse,
   LoaderCircle,
@@ -11,6 +10,7 @@ import {
   TriangleAlert,
 } from "lucide-react";
 import { panelApi } from "../api/client.js";
+import { useFeedback } from "../components/FeedbackProvider.jsx";
 
 const colors = ["#7c5cff", "#36d399", "#4aa8ff", "#f59e0b"];
 
@@ -149,6 +149,7 @@ function ApplicationMonitorCard({ application, canWrite, onChange, onSave, busy 
 }
 
 export function MonitoringPage({ team }) {
+  const feedback = useFeedback();
   const [summary, setSummary] = useState({ activeAlerts: 0, offlineNodes: 0, failedApplications: 0, unhealthyChecks: 0 });
   const [nodes, setNodes] = useState([]);
   const [applications, setApplications] = useState([]);
@@ -160,7 +161,6 @@ export function MonitoringPage({ team }) {
   const [series, setSeries] = useState({ points: [], health: [] });
   const [busy, setBusy] = useState("");
   const [error, setError] = useState("");
-  const [notice, setNotice] = useState("");
   const canManage = ["owner", "administrator"].includes(team?.role);
   const canWrite = canManage || team?.role === "developer";
 
@@ -203,15 +203,15 @@ export function MonitoringPage({ team }) {
 
   async function saveSettings(event) {
     event.preventDefault();
-    setBusy("settings"); setError(""); setNotice("");
+    setBusy("settings"); setError("");
     try {
       await panelApi.updateMonitoringSettings({
         ...settings,
         emailRecipients: recipientText.split(",").map((item) => item.trim()).filter(Boolean),
       });
-      setNotice("Monitoring settings saved.");
+      feedback.success("Monitoring settings saved.");
       await load();
-    } catch (caught) { setError(caught.message || "Could not save monitoring settings"); }
+    } catch (caught) { feedback.error(caught.message || "Could not save monitoring settings"); }
     finally { setBusy(""); }
   }
 
@@ -220,13 +220,13 @@ export function MonitoringPage({ team }) {
   }
 
   async function saveApplication(application) {
-    setBusy(application.id); setError(""); setNotice("");
+    setBusy(application.id); setError("");
     try {
       await panelApi.updateApplicationMonitoring(application.id, { health: application.health, limits: application.limits });
-      setNotice(`${application.name} monitoring saved.`);
+      feedback.success(`${application.name} monitoring saved.`);
       const response = await panelApi.monitoredApplications();
       setApplications(response.data);
-    } catch (caught) { setError(caught.message || "Could not save application monitoring"); }
+    } catch (caught) { feedback.error(caught.message || "Could not save application monitoring"); }
     finally { setBusy(""); }
   }
 
@@ -237,7 +237,6 @@ export function MonitoringPage({ team }) {
         <button className="secondary" onClick={load}><RefreshCw size={15} /> Refresh</button>
       </div>
       {error && <div className="data-error">{error}</div>}
-      {notice && <div className="success-banner"><CheckCircle2 size={16} /> {notice}</div>}
 
       <div className="monitor-summary">
         {[

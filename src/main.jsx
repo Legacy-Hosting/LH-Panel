@@ -33,6 +33,10 @@ import { DeploymentsPage } from "./pages/DeploymentsPage.jsx";
 import { NotificationMenu } from "./components/NotificationMenu.jsx";
 import { MonitoringPage } from "./pages/MonitoringPage.jsx";
 import { PANEL_VERSION } from "./version.js";
+import {
+  FeedbackProvider,
+  useFeedback,
+} from "./components/FeedbackProvider.jsx";
 
 const nav = [
   { label: "Overview", icon: LayoutDashboard, path: "/" },
@@ -97,7 +101,8 @@ function isPlainNavigation(event) {
 }
 
 function App() {
-  const { user, logout } = useAuth();
+  const { user, logout, refresh } = useAuth();
+  const feedback = useFeedback();
   const selectedTeam =
     user.teams?.find(
       (team) => team.id === window.localStorage.getItem("lh_active_team"),
@@ -157,27 +162,38 @@ function App() {
     loadDashboard();
   }, [loadDashboard]);
   async function applicationAction(applicationId, action) {
-    setDataError("");
     try {
       await panelApi.applicationAction(applicationId, action);
+      feedback.success(
+        `Application ${action === "start" ? "start" : "restart"} queued.`,
+      );
       await loadDashboard();
     } catch (error) {
-      setDataError(error.message || "Could not queue application action");
+      feedback.error(error.message || "Could not queue application action");
     }
   }
   async function deleteApplication(application) {
-    if (
-      !window.confirm(
-        `Delete ${application.name}? Its files will be moved to recoverable node trash.`,
-      )
-    )
-      return;
-    setDataError("");
+    const approved = await feedback.confirm({
+      title: `Delete ${application.name}?`,
+      message:
+        "The application will stop and its files will be moved to recoverable node trash.",
+      confirmLabel: "Delete application",
+    });
+    if (!approved) return;
     try {
       await panelApi.deleteApplication(application.id);
+      feedback.success(`${application.name} deletion queued.`);
       await loadDashboard();
     } catch (error) {
-      setDataError(error.message || "Could not queue application deletion");
+      feedback.error(error.message || "Could not queue application deletion");
+    }
+  }
+  async function handleLogout() {
+    try {
+      await logout();
+      feedback.success("You have been signed out.");
+    } catch (error) {
+      feedback.error(error.message || "Could not sign out");
     }
   }
   return (
@@ -243,7 +259,7 @@ function App() {
             </div>
             <button
               className="profile-action"
-              onClick={logout}
+              onClick={handleLogout}
               title="Sign out"
             >
               <LogOut size={16} />
@@ -270,7 +286,7 @@ function App() {
             <NotificationMenu />
             <button
               className="icon-btn mobile-logout"
-              onClick={logout}
+              onClick={handleLogout}
               title="Sign out"
             >
               <LogOut size={18} />
@@ -320,7 +336,7 @@ function App() {
           ) : page === "Domains" ? (
             <DomainsPage />
           ) : page === "Team" ? (
-            <TeamPage team={selectedTeam} />
+            <TeamPage team={selectedTeam} onTeamUpdated={refresh} />
           ) : page === "Deployments" ? (
             <DeploymentsPage />
           ) : page === "Monitoring" ? (
@@ -651,7 +667,9 @@ function Footer() {
   );
 }
 createRoot(document.getElementById("root")).render(
-  <AuthGate>
-    <App />
-  </AuthGate>,
+  <FeedbackProvider>
+    <AuthGate>
+      <App />
+    </AuthGate>
+  </FeedbackProvider>,
 );
