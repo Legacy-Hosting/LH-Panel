@@ -4,6 +4,36 @@ const API_ROOT = (
 
 let csrfToken = "";
 
+const fieldLabels = {
+  name: "Name",
+  publicFqdn: "Public FQDN",
+  publicIpv4: "Public IPv4",
+  publicIpv6: "Public IPv6",
+  privateFqdn: "Private FQDN",
+  privateIpv4: "Private IPv4",
+  privateIpv6: "Private IPv6",
+  cnameTarget: "CNAME target",
+  region: "Region",
+};
+
+function errorMessage(payload, status) {
+  const fieldErrors = payload.details?.fieldErrors;
+  if (fieldErrors && typeof fieldErrors === "object") {
+    for (const [field, messages] of Object.entries(fieldErrors)) {
+      if (Array.isArray(messages) && messages[0]) {
+        return `${fieldLabels[field] || field}: ${messages[0]}`;
+      }
+    }
+  }
+  const formError = payload.details?.formErrors?.[0];
+  if (formError) return formError;
+  return (
+    payload.message ||
+    payload.error ||
+    `Request failed with status ${status}`
+  );
+}
+
 async function csrf() {
   if (csrfToken) return csrfToken;
   const response = await fetch(`${API_ROOT}/auth/csrf`, {
@@ -45,11 +75,7 @@ async function request(path, options = {}) {
     const payload = await response
       .json()
       .catch(() => ({ message: response.statusText }));
-    const error = new Error(
-      payload.error ||
-        payload.message ||
-        `Request failed with status ${response.status}`,
-    );
+    const error = new Error(errorMessage(payload, response.status));
     error.status = response.status;
     error.details = payload.details;
     throw error;
@@ -126,6 +152,11 @@ export const panelApi = {
       body: JSON.stringify(body),
     }),
   teams: () => request("/teams"),
+  createTeam: (body) =>
+    request("/teams", {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
   updateTeam: (teamId, body) =>
     request(`/teams/${teamId}`, {
       method: "PATCH",

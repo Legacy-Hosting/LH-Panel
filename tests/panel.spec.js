@@ -6,9 +6,16 @@ const team = {
   slug: "nextarch",
   role: "owner",
 };
+const createdTeam = {
+  id: "55555555-5555-4555-8555-555555555555",
+  name: "Legacy Hosting Apps",
+  slug: "legacy-hosting-apps-1234abcd",
+  role: "owner",
+};
 
 async function mockApi(page) {
   let teamName = team.name;
+  let teams = [{ ...team }];
   await page.route("http://localhost:8080/api/v1/**", async (route) => {
     const request = route.request();
     const path = new URL(request.url()).pathname;
@@ -24,6 +31,16 @@ async function mockApi(page) {
       });
       return;
     }
+    if (path === "/api/v1/teams" && request.method() === "POST") {
+      const newTeam = { ...createdTeam, name: request.postDataJSON().name };
+      teams = [...teams, newTeam];
+      await route.fulfill({
+        status: 201,
+        contentType: "application/json",
+        body: JSON.stringify({ data: newTeam }),
+      });
+      return;
+    }
     const responses = {
       "/api/v1/auth/me": {
         data: {
@@ -31,7 +48,9 @@ async function mockApi(page) {
           email: "dj@example.com",
           displayName: "DJ Ang",
           isPlatformAdmin: true,
-          teams: [{ ...team, name: teamName }],
+          teams: teams.map((item) =>
+            item.id === team.id ? { ...item, name: teamName } : item,
+          ),
         },
       },
       "/api/v1/panel/overview": {
@@ -102,7 +121,7 @@ test("desktop shell keeps navigation and footer visible", async ({ page }, testI
   test.skip(testInfo.project.name !== "desktop-chromium", "desktop only");
   await expect(page.locator("aside")).toBeVisible();
   await expect(page.locator("footer")).toBeVisible();
-  await expect(page.getByText("LH-Panel v1.0.3")).toBeVisible();
+  await expect(page.getByText("LH-Panel v1.0.7")).toBeVisible();
   await expect(page.getByRole("button", { name: "New application" })).toBeVisible();
   const overflow = await page
     .locator("body")
@@ -195,6 +214,42 @@ test("team administrators can rename their workspace", async ({ page }) => {
   await expect(
     page.getByRole("heading", { name: "Legacy Hosting", exact: true }).first(),
   ).toBeVisible();
+});
+
+test("users can create and switch between teams", async ({ page }) => {
+  const switcher = page.locator('.workspace[aria-label^="Switch team"]:visible');
+  await switcher.click();
+  await page.getByRole("menu").getByRole("button", { name: "Create team" }).click();
+
+  const dialog = page.getByRole("dialog", { name: "Create a new team" });
+  await dialog.getByRole("textbox", { name: "Team name" }).fill(createdTeam.name);
+  const teamDataRequest = page.waitForRequest(
+    (request) =>
+      new URL(request.url()).pathname === "/api/v1/panel/overview" &&
+      request.headers()["x-team-id"] === createdTeam.id,
+  );
+  await dialog
+    .getByRole("button", { name: "Create team", exact: true })
+    .click();
+  await teamDataRequest;
+
+  await expect(
+    page.getByRole("status").filter({ hasText: `${createdTeam.name} was created` }),
+  ).toBeVisible();
+  await expect(switcher).toHaveAttribute(
+    "aria-label",
+    `Switch team. Current team: ${createdTeam.name}`,
+  );
+  await expect
+    .poll(() => page.evaluate(() => localStorage.getItem("lh_active_team")))
+    .toBe(createdTeam.id);
+
+  await switcher.click();
+  await page.getByRole("menu").getByRole("menuitem", { name: /Nextarch Studio/ }).click();
+  await expect(switcher).toHaveAttribute(
+    "aria-label",
+    `Switch team. Current team: ${team.name}`,
+  );
 });
 
 test("nodes accept public and private FQDN, IPv4, and IPv6", async ({

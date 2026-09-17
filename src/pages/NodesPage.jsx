@@ -177,9 +177,16 @@ export function NodesPage() {
               <div className="auth-input">
                 <input
                   required
+                  minLength="2"
+                  maxLength="80"
+                  pattern="[a-z0-9](?:[a-z0-9-]*[a-z0-9])?"
+                  title="Use lowercase letters, numbers, and hyphens only"
                   value={form.name}
                   onChange={(event) =>
-                    setForm({ ...form, name: event.target.value })
+                    setForm({
+                      ...form,
+                      name: event.target.value.toLowerCase(),
+                    })
                   }
                   placeholder="ams3-web-01"
                 />

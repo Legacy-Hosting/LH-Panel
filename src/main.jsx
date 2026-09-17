@@ -31,6 +31,7 @@ import { DomainsPage } from "./pages/DomainsPage.jsx";
 import { ApplicationsPage } from "./pages/ApplicationsPage.jsx";
 import { DeploymentsPage } from "./pages/DeploymentsPage.jsx";
 import { NotificationMenu } from "./components/NotificationMenu.jsx";
+import { WorkspaceSwitcher } from "./components/WorkspaceSwitcher.jsx";
 import { MonitoringPage } from "./pages/MonitoringPage.jsx";
 import { PANEL_VERSION } from "./version.js";
 import {
@@ -103,10 +104,11 @@ function isPlainNavigation(event) {
 function App() {
   const { user, logout, refresh } = useAuth();
   const feedback = useFeedback();
+  const [activeTeamId, setActiveTeamId] = useState(
+    () => window.localStorage.getItem("lh_active_team") || "",
+  );
   const selectedTeam =
-    user.teams?.find(
-      (team) => team.id === window.localStorage.getItem("lh_active_team"),
-    ) || user.teams?.[0];
+    user.teams?.find((team) => team.id === activeTeamId) || user.teams?.[0];
   const [route, setRoute] = useState(routeFromPathname);
   const page = route.page;
   const [query, setQuery] = useState("");
@@ -135,7 +137,15 @@ function App() {
     window.addEventListener("popstate", handlePopState);
     return () => window.removeEventListener("popstate", handlePopState);
   }, []);
+  useEffect(() => {
+    if (selectedTeam?.id && activeTeamId !== selectedTeam.id) {
+      panelApi.selectTeam(selectedTeam.id);
+      setActiveTeamId(selectedTeam.id);
+    }
+  }, [activeTeamId, selectedTeam?.id]);
   const loadDashboard = useCallback(async () => {
+    const teamId = selectedTeam?.id;
+    if (!teamId) return;
     setDataError("");
     try {
       const [
@@ -149,15 +159,17 @@ function App() {
         panelApi.nodes(),
         panelApi.deployments(),
       ]);
+      if (window.localStorage.getItem("lh_active_team") !== teamId) return;
       setApps(applicationResponse.data);
       setStats(overviewResponse.data.stats);
       setSystemStatus(overviewResponse.data.systemStatus);
       setNodes(nodeResponse.data);
       setDeployments(deploymentResponse.data);
     } catch (error) {
+      if (window.localStorage.getItem("lh_active_team") !== teamId) return;
       setDataError(error.message || "Could not load workspace data");
     }
-  }, []);
+  }, [selectedTeam?.id]);
   useEffect(() => {
     loadDashboard();
   }, [loadDashboard]);
@@ -196,6 +208,23 @@ function App() {
       feedback.error(error.message || "Could not sign out");
     }
   }
+  function handleTeamSelect(team) {
+    if (!team || team.id === selectedTeam?.id) return;
+    panelApi.selectTeam(team.id);
+    setActiveTeamId(team.id);
+    setApps([]);
+    setNodes([]);
+    setDeployments([]);
+    setStats(emptyStats);
+    setDataError("");
+    setShowCreateApplication(false);
+    if (route.applicationId) navigate("/applications", { replace: true });
+  }
+  async function handleTeamCreated(team) {
+    panelApi.selectTeam(team.id);
+    await refresh();
+    handleTeamSelect(team);
+  }
   return (
     <div className="shell">
       <aside>
@@ -206,13 +235,13 @@ function App() {
             <span>Control panel</span>
           </div>
         </div>
-        <div className="workspace">
-          <div className="workspace-icon">N</div>
-          <div>
-            <b>{selectedTeam?.name || "Workspace"}</b>
-            <small>{selectedTeam?.role || "No team selected"}</small>
-          </div>
-          <ChevronDown size={15} />
+        <div className="desktop-workspace-switcher">
+          <WorkspaceSwitcher
+            teams={user.teams}
+            selectedTeam={selectedTeam}
+            onSelect={handleTeamSelect}
+            onCreated={handleTeamCreated}
+          />
         </div>
         <nav>
           {nav.map(({ label, icon: Icon, path }) => (
@@ -279,11 +308,20 @@ function App() {
                 : page}
             </h1>
           </div>
+          <div className="mobile-workspace-switcher">
+            <WorkspaceSwitcher
+              compact
+              teams={user.teams}
+              selectedTeam={selectedTeam}
+              onSelect={handleTeamSelect}
+              onCreated={handleTeamCreated}
+            />
+          </div>
           <div className="header-actions">
             <button className="icon-btn">
               <Search size={18} />
             </button>
-            <NotificationMenu />
+            <NotificationMenu key={selectedTeam?.id} />
             <button
               className="icon-btn mobile-logout"
               onClick={handleLogout}
@@ -305,7 +343,7 @@ function App() {
             </button>
           </div>
         </header>
-        <div className="scroll-content">
+        <div className="scroll-content" key={selectedTeam?.id}>
           {page === "Overview" ? (
             <Overview
               query={query}
@@ -348,6 +386,7 @@ function App() {
         <Footer />
       </main>
       <CreateApplicationModal
+        key={selectedTeam?.id}
         open={showCreateApplication}
         onClose={() => setShowCreateApplication(false)}
         onCreated={loadDashboard}
