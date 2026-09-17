@@ -17,8 +17,12 @@ export function NodesPage() {
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState({
     name: "",
-    publicIp: "",
-    privateIp: "",
+    publicFqdn: "",
+    publicIpv4: "",
+    publicIpv6: "",
+    privateFqdn: "",
+    privateIpv4: "",
+    privateIpv6: "",
     cnameTarget: "",
     region: "",
   });
@@ -46,7 +50,11 @@ export function NodesPage() {
     try {
       const response = await panelApi.createNode({
         ...form,
-        privateIp: form.privateIp || undefined,
+        publicIpv4: form.publicIpv4 || undefined,
+        publicIpv6: form.publicIpv6 || undefined,
+        privateFqdn: form.privateFqdn || undefined,
+        privateIpv4: form.privateIpv4 || undefined,
+        privateIpv6: form.privateIpv6 || undefined,
         region: form.region || undefined,
       });
       setAgent(response.data.agent);
@@ -164,31 +172,160 @@ export function NodesPage() {
             </div>
           </div>
           <div className="form-grid">
-            {[
-              ["name", "Node name", "ams3-web-01"],
-              ["region", "Region", "Amsterdam, NL"],
-              ["publicIp", "Public IP", "203.0.113.10"],
-              ["privateIp", "Private IP (optional)", "10.0.0.10"],
-              ["cnameTarget", "CNAME target", "ams3.web-01.legacyh.fyi"],
-            ].map(([key, label, placeholder]) => (
-              <label
-                key={key}
-                className={key === "cnameTarget" ? "wide-field" : ""}
-              >
-                <span>{label}</span>
+            <label>
+              <span>Node name</span>
+              <div className="auth-input">
+                <input
+                  required
+                  value={form.name}
+                  onChange={(event) =>
+                    setForm({ ...form, name: event.target.value })
+                  }
+                  placeholder="ams3-web-01"
+                />
+              </div>
+            </label>
+            <label>
+              <span>Region</span>
+              <div className="auth-input">
+                <input
+                  value={form.region}
+                  onChange={(event) =>
+                    setForm({ ...form, region: event.target.value })
+                  }
+                  placeholder="Amsterdam, NL"
+                />
+              </div>
+            </label>
+          </div>
+
+          <section className="node-form-section">
+            <div className="node-form-section-head">
+              <h4>Public network</h4>
+              <p>A public FQDN and at least one public IP are required.</p>
+            </div>
+            <div className="form-grid">
+              <label className="wide-field">
+                <span>Public FQDN</span>
                 <div className="auth-input">
                   <input
-                    required={!["region", "privateIp"].includes(key)}
-                    value={form[key]}
-                    onChange={(event) =>
-                      setForm({ ...form, [key]: event.target.value })
-                    }
-                    placeholder={placeholder}
+                    required
+                    value={form.publicFqdn}
+                    onChange={(event) => {
+                      const publicFqdn = event.target.value.toLowerCase();
+                      setForm({
+                        ...form,
+                        publicFqdn,
+                        cnameTarget:
+                          !form.cnameTarget ||
+                          form.cnameTarget === form.publicFqdn
+                            ? publicFqdn
+                            : form.cnameTarget,
+                      });
+                    }}
+                    placeholder="ams3.web-01.legacyh.fyi"
                   />
                 </div>
               </label>
-            ))}
-          </div>
+              <label>
+                <span>Public IPv4</span>
+                <div className="auth-input">
+                  <input
+                    required={!form.publicIpv6}
+                    value={form.publicIpv4}
+                    onChange={(event) =>
+                      setForm({ ...form, publicIpv4: event.target.value })
+                    }
+                    placeholder="203.0.113.10"
+                  />
+                </div>
+              </label>
+              <label>
+                <span>Public IPv6</span>
+                <div className="auth-input">
+                  <input
+                    required={!form.publicIpv4}
+                    value={form.publicIpv6}
+                    onChange={(event) =>
+                      setForm({ ...form, publicIpv6: event.target.value })
+                    }
+                    placeholder="2001:db8::10"
+                  />
+                </div>
+              </label>
+            </div>
+          </section>
+
+          <section className="node-form-section">
+            <div className="node-form-section-head">
+              <h4>Private network</h4>
+              <p>Optional addresses used inside your private network.</p>
+            </div>
+            <div className="form-grid">
+              <label className="wide-field">
+                <span>Private FQDN (optional)</span>
+                <div className="auth-input">
+                  <input
+                    value={form.privateFqdn}
+                    onChange={(event) =>
+                      setForm({
+                        ...form,
+                        privateFqdn: event.target.value.toLowerCase(),
+                      })
+                    }
+                    placeholder="ams3.web-01.internal.legacyh.fyi"
+                  />
+                </div>
+              </label>
+              <label>
+                <span>Private IPv4 (optional)</span>
+                <div className="auth-input">
+                  <input
+                    value={form.privateIpv4}
+                    onChange={(event) =>
+                      setForm({ ...form, privateIpv4: event.target.value })
+                    }
+                    placeholder="10.0.0.10"
+                  />
+                </div>
+              </label>
+              <label>
+                <span>Private IPv6 (optional)</span>
+                <div className="auth-input">
+                  <input
+                    value={form.privateIpv6}
+                    onChange={(event) =>
+                      setForm({ ...form, privateIpv6: event.target.value })
+                    }
+                    placeholder="fd00::10"
+                  />
+                </div>
+              </label>
+            </div>
+          </section>
+
+          <section className="node-form-section node-dns-section">
+            <div className="node-form-section-head">
+              <h4>Application DNS</h4>
+              <p>Customer domains will use this hostname as their CNAME.</p>
+            </div>
+            <label>
+              <span>CNAME target</span>
+              <div className="auth-input">
+                <input
+                  required
+                  value={form.cnameTarget}
+                  onChange={(event) =>
+                    setForm({
+                      ...form,
+                      cnameTarget: event.target.value.toLowerCase(),
+                    })
+                  }
+                  placeholder="ams3.web-01.legacyh.fyi"
+                />
+              </div>
+            </label>
+          </section>
           <div className="modal-actions">
             <button
               type="button"
@@ -213,18 +350,32 @@ export function NodesPage() {
           <div className="empty-row">No nodes have been added.</div>
         )}
         {nodes.map((node) => (
-          <div className="resource-row" key={node.id}>
+          <div className="resource-row node-resource-row" key={node.id}>
             <div className="resource-symbol">
               <Server size={18} />
             </div>
             <div className="resource-main">
               <b>{node.name}</b>
               <span>
-                {node.region || "Unknown region"} · {node.publicIp}
+                {node.region || "Unknown region"} · {node.publicFqdn}
               </span>
             </div>
             <div className="resource-detail">
-              <small>CNAME</small>
+              <small>Public IP</small>
+              <b>{node.publicIpv4 || "No IPv4"}</b>
+              <span>{node.publicIpv6 || "No IPv6"}</span>
+            </div>
+            <div className="resource-detail">
+              <small>Private network</small>
+              <b>{node.privateFqdn || "No private FQDN"}</b>
+              <span>
+                {[node.privateIpv4, node.privateIpv6]
+                  .filter(Boolean)
+                  .join(" · ") || "No private IP"}
+              </span>
+            </div>
+            <div className="resource-detail">
+              <small>CNAME target</small>
               <b>{node.cnameTarget}</b>
             </div>
             <div className="resource-detail">

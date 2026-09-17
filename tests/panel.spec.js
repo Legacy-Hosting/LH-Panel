@@ -69,6 +69,13 @@ async function mockApi(page) {
             name: "ams3-web-01",
             region: "Amsterdam",
             status: "online",
+            publicFqdn: "ams3.web-01.legacyh.fyi",
+            publicIpv4: "203.0.113.10",
+            publicIpv6: "2001:db8::10",
+            privateFqdn: "ams3.web-01.internal.legacyh.fyi",
+            privateIpv4: "10.0.0.10",
+            privateIpv6: "fd00::10",
+            cnameTarget: "ams3.web-01.legacyh.fyi",
             memory: 42,
             disk: 30,
           },
@@ -187,5 +194,48 @@ test("team administrators can rename their workspace", async ({ page }) => {
   ).toBeVisible();
   await expect(
     page.getByRole("heading", { name: "Legacy Hosting", exact: true }).first(),
+  ).toBeVisible();
+});
+
+test("nodes accept public and private FQDN, IPv4, and IPv6", async ({
+  page,
+}) => {
+  await page.getByRole("link", { name: "Nodes", exact: true }).click();
+  await page.getByRole("button", { name: "Add node" }).click();
+
+  await page.getByLabel("Node name").fill("ams3-web-02");
+  await page.getByLabel("Region").fill("Amsterdam, NL");
+  await page
+    .getByLabel("Public FQDN")
+    .fill("ams3.web-02.legacyh.fyi");
+  await page.getByLabel("Public IPv4", { exact: true }).fill("203.0.113.20");
+  await page.getByLabel("Public IPv6", { exact: true }).fill("2001:db8::20");
+  await page
+    .getByLabel("Private FQDN (optional)")
+    .fill("ams3.web-02.internal.legacyh.fyi");
+  await page
+    .getByLabel("Private IPv4 (optional)")
+    .fill("10.0.0.20");
+  await page.getByLabel("Private IPv6 (optional)").fill("fd00::20");
+
+  const createRequest = page.waitForRequest(
+    (request) =>
+      new URL(request.url()).pathname === "/api/v1/panel/nodes" &&
+      request.method() === "POST",
+  );
+  await page.getByRole("button", { name: "Create node" }).click();
+  const payload = (await createRequest).postDataJSON();
+
+  expect(payload).toMatchObject({
+    publicFqdn: "ams3.web-02.legacyh.fyi",
+    publicIpv4: "203.0.113.20",
+    publicIpv6: "2001:db8::20",
+    privateFqdn: "ams3.web-02.internal.legacyh.fyi",
+    privateIpv4: "10.0.0.20",
+    privateIpv6: "fd00::20",
+    cnameTarget: "ams3.web-02.legacyh.fyi",
+  });
+  await expect(
+    page.getByRole("status").filter({ hasText: "ams3-web-02 was created" }),
   ).toBeVisible();
 });

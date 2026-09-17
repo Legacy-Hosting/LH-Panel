@@ -169,7 +169,7 @@ export function CreateApplicationModal({ open, onClose, onCreated }) {
                   <option value="">Select a node</option>
                   {nodes.map((node) => (
                     <option value={node.id} key={node.id}>
-                      {node.name} · {node.region || node.publicIp}
+                      {node.name} · {node.region || node.publicFqdn}
                     </option>
                   ))}
                 </select>
