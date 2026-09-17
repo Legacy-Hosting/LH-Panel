@@ -26,7 +26,7 @@ const nodeAgent = {
     "curl -fsSL 'https://api.legacyhosting.xyz/api/v1/agent/install.sh' | sudo bash -s -- --api-url 'https://api.legacyhosting.xyz/api/v1' --node-id '66666666-6666-4666-8666-666666666666' --token 'abcdefghijklmnopqrstuvwxyzABCDEFGH12345678'",
 };
 
-async function mockApi(page) {
+async function mockApi(page, { isPlatformAdmin = true } = {}) {
   let teamName = team.name;
   let teams = [{ ...team }];
   await page.route("http://localhost:8080/api/v1/**", async (route) => {
@@ -62,13 +62,24 @@ async function mockApi(page) {
       });
       return;
     }
+    if (
+      path === "/api/v1/panel/applications" &&
+      request.method() === "POST"
+    ) {
+      await route.fulfill({
+        status: 201,
+        contentType: "application/json",
+        body: JSON.stringify({ data: { id: "77777777-7777-4777-8777-777777777777", status: "Pending" } }),
+      });
+      return;
+    }
     const responses = {
       "/api/v1/auth/me": {
         data: {
           id: "22222222-2222-4222-8222-222222222222",
           email: "dj@example.com",
           displayName: "DJ Ang",
-          isPlatformAdmin: true,
+          isPlatformAdmin,
           teams: teams.map((item) =>
             item.id === team.id ? { ...item, name: teamName } : item,
           ),
@@ -121,6 +132,29 @@ async function mockApi(page) {
           },
         ],
       },
+      "/api/v1/panel/application-targets": {
+        data: [
+          {
+            id: "44444444-4444-4444-8444-444444444444",
+            region: "Amsterdam, NL",
+          },
+        ],
+      },
+      "/api/v1/integrations/github/repositories": {
+        data: [
+          {
+            id: "88888888-8888-4888-8888-888888888888",
+            fullName: "NextarchStudio/Bifrost",
+            metadata: { defaultBranch: "main", private: true },
+          },
+        ],
+      },
+      "/api/v1/integrations/cloudflare/zones": {
+        data: [
+          { id: "99999999-9999-4999-8999-999999999999", name: "legacyh.dev" },
+          { id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", name: "tg.no" },
+        ],
+      },
       "/api/v1/panel/deployments": { data: [] },
       "/api/v1/panel/notifications": { data: [], meta: { unread: 0 } },
     };
@@ -132,8 +166,10 @@ async function mockApi(page) {
   });
 }
 
-test.beforeEach(async ({ page }) => {
-  await mockApi(page);
+test.beforeEach(async ({ page }, testInfo) => {
+  await mockApi(page, {
+    isPlatformAdmin: !testInfo.title.startsWith("customer accounts"),
+  });
   await page.goto("/");
   await expect(page.getByText("Good afternoon, DJ")).toBeVisible();
 });
@@ -142,7 +178,7 @@ test("desktop shell keeps navigation and footer visible", async ({ page }, testI
   test.skip(testInfo.project.name !== "desktop-chromium", "desktop only");
   await expect(page.locator("aside")).toBeVisible();
   await expect(page.locator("footer")).toBeVisible();
-  await expect(page.getByText("LH-Panel v1.0.9")).toBeVisible();
+  await expect(page.getByText("LH-Panel v1.0.10")).toBeVisible();
   await expect(page.getByRole("button", { name: "New application" })).toBeVisible();
   const overflow = await page
     .locator("body")
@@ -276,7 +312,8 @@ test("users can create and switch between teams", async ({ page }) => {
 test("nodes accept public and private FQDN, IPv4, and IPv6", async ({
   page,
 }) => {
-  await page.getByRole("link", { name: "Nodes", exact: true }).click();
+  await page.getByRole("link", { name: "Admin", exact: true }).click();
+  await expect(page).toHaveURL(/\/admin\/nodes$/);
   await page.getByRole("button", { name: "Add node" }).click();
 
   await page.getByLabel("Node name").fill("ams3-web-02");
@@ -327,4 +364,43 @@ test("nodes accept public and private FQDN, IPv4, and IPv6", async ({
     (element) => element.scrollWidth - element.clientWidth,
   );
   expect(dialogOverflow).toBeLessThanOrEqual(1);
+});
+
+test("multiple PM2 processes never submit customer-selected ports", async ({ page }) => {
+  await page.getByRole("button", { name: "New application" }).click();
+  const dialog = page.getByRole("dialog", { name: "New application" });
+  await dialog.getByLabel("Application name").fill("bifrost");
+  await dialog.getByLabel("Hostname", { exact: true }).fill("tg.legacyh.dev");
+  await dialog.getByLabel("GitHub repository").selectOption("NextarchStudio/Bifrost");
+  await dialog.getByLabel("Process setup").selectOption("multiple");
+  await dialog.getByRole("textbox", { name: /^Additional hostnames/ }).fill("bifrost.tg.no");
+
+  const createRequest = page.waitForRequest(
+    (request) =>
+      new URL(request.url()).pathname === "/api/v1/panel/applications" &&
+      request.method() === "POST",
+  );
+  await dialog.getByRole("button", { name: "Create application" }).click();
+  const payload = (await createRequest).postDataJSON();
+
+  expect(payload.nodeId).toBe("44444444-4444-4444-8444-444444444444");
+  expect(payload.additionalHostnames).toEqual(["bifrost.tg.no"]);
+  expect(payload.processes.map((process) => process.type)).toEqual([
+    "web",
+    "api",
+    "worker",
+  ]);
+  expect(JSON.stringify(payload)).not.toContain("internalPort");
+  expect(payload.environment.PORT).toBeUndefined();
+  expect(payload.processes.every((process) => process.environment.PORT === undefined)).toBe(true);
+});
+
+test("customer accounts cannot access internal node administration", async ({ page }) => {
+  await expect(page.getByRole("link", { name: "Admin", exact: true })).toHaveCount(0);
+  await expect(page.getByText("Node health")).toHaveCount(0);
+
+  await page.goto("/admin/nodes");
+  await expect(page).toHaveURL(/\/$/);
+  await expect(page.getByText("Good afternoon, DJ")).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Nodes", exact: true })).toHaveCount(0);
 });

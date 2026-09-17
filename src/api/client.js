@@ -231,6 +231,7 @@ export const panelApi = {
     ),
   deleteApplication: (applicationId) =>
     request(`/panel/applications/${applicationId}`, { method: "DELETE" }),
+  applicationTargets: () => request("/panel/application-targets"),
   nodes: () => request("/panel/nodes"),
   createNode: (body) =>
     request("/panel/nodes", { method: "POST", body: JSON.stringify(body) }),

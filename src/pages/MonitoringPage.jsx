@@ -115,7 +115,7 @@ function ApplicationMonitorCard({ application, canWrite, onChange, onSave, busy 
     <section className="settings-card monitor-app-card">
       <div className="monitor-app-head">
         <span className={`health-dot ${application.health.status}`}></span>
-        <div><h3>{application.name}</h3><p>{application.hostname} · {application.nodeName}</p></div>
+        <div><h3>{application.name}</h3><p>{application.hostname}</p></div>
         <span className={`health-state ${application.health.status}`}>{application.health.status}</span>
       </div>
       <div className="monitor-usage-strip">
@@ -148,7 +148,7 @@ function ApplicationMonitorCard({ application, canWrite, onChange, onSave, busy 
   );
 }
 
-export function MonitoringPage({ team }) {
+export function MonitoringPage({ team, infrastructure = false }) {
   const feedback = useFeedback();
   const [summary, setSummary] = useState({ activeAlerts: 0, offlineNodes: 0, failedApplications: 0, unhealthyChecks: 0 });
   const [nodes, setNodes] = useState([]);
@@ -167,22 +167,41 @@ export function MonitoringPage({ team }) {
   async function load() {
     setError("");
     try {
+      const nodeRequest = infrastructure
+        ? panelApi.nodes()
+        : Promise.resolve({ data: [] });
+      const applicationRequest = infrastructure
+        ? Promise.resolve({ data: [] })
+        : panelApi.monitoredApplications();
       const [summaryResponse, nodeResponse, applicationResponse, alertResponse, settingsResponse] = await Promise.all([
-        panelApi.monitoringSummary(), panelApi.nodes(), panelApi.monitoredApplications(), panelApi.monitoringAlerts(), panelApi.monitoringSettings(),
+        panelApi.monitoringSummary(), nodeRequest, applicationRequest, panelApi.monitoringAlerts(), panelApi.monitoringSettings(),
       ]);
       setSummary(summaryResponse.data);
       setNodes(nodeResponse.data);
       setApplications(applicationResponse.data);
-      setAlerts(alertResponse.data);
+      setAlerts(
+        alertResponse.data.filter((alert) =>
+          infrastructure
+            ? alert.resourceType === "node"
+            : alert.resourceType !== "node",
+        ),
+      );
       setSettings({ ...settingsResponse.data, webhookUrl: undefined, webhookSecret: undefined });
       setRecipientText(settingsResponse.data.emailRecipients.join(", "));
-      setSelection((current) => current || (nodeResponse.data[0] ? `node:${nodeResponse.data[0].id}` : applicationResponse.data[0] ? `application:${applicationResponse.data[0].id}` : ""));
+      setSelection((current) =>
+        current ||
+        (infrastructure && nodeResponse.data[0]
+          ? `node:${nodeResponse.data[0].id}`
+          : applicationResponse.data[0]
+            ? `application:${applicationResponse.data[0].id}`
+            : ""),
+      );
     } catch (caught) {
       setError(caught.message || "Could not load monitoring data");
     }
   }
 
-  useEffect(() => { load(); }, []);
+  useEffect(() => { load(); }, [infrastructure]);
   useEffect(() => {
     if (!selection) return;
     const [scope, resourceId] = selection.split(":");
@@ -233,25 +252,38 @@ export function MonitoringPage({ team }) {
   return (
     <div className="monitoring-page">
       <div className="resource-heading monitor-title">
-        <div><h2>Monitoring</h2><p>Live health, historical metrics, limits, and alert delivery.</p></div>
+        <div>
+          <h2>{infrastructure ? "Infrastructure monitoring" : "Application monitoring"}</h2>
+          <p>
+            {infrastructure
+              ? "Internal node health, capacity, and infrastructure alerts."
+              : "Application health, historical metrics, limits, and alert delivery."}
+          </p>
+        </div>
         <button className="secondary" onClick={load}><RefreshCw size={15} /> Refresh</button>
       </div>
       {error && <div className="data-error">{error}</div>}
 
       <div className="monitor-summary">
-        {[
-          ["Active alerts", summary.activeAlerts, BellRing],
-          ["Offline nodes", summary.offlineNodes, Server],
-          ["Failed processes", summary.failedApplications, Gauge],
-          ["Unhealthy checks", summary.unhealthyChecks, HeartPulse],
-        ].map(([label, value, Icon]) => <div className="monitor-summary-card" key={label}><Icon size={18} /><span><small>{label}</small><b>{value}</b></span></div>)}
+        {(infrastructure
+          ? [
+              ["Active alerts", summary.activeAlerts, BellRing],
+              ["Offline nodes", summary.offlineNodes, Server],
+            ]
+          : [
+              ["Active alerts", summary.activeAlerts, BellRing],
+              ["Failed processes", summary.failedApplications, Gauge],
+              ["Unhealthy checks", summary.unhealthyChecks, HeartPulse],
+            ]
+        ).map(([label, value, Icon]) => <div className="monitor-summary-card" key={label}><Icon size={18} /><span><small>{label}</small><b>{value}</b></span></div>)}
       </div>
 
       <section className="monitor-toolbar">
         <div><h3>Metric history</h3><p>Samples are aggregated to a useful resolution for the selected period.</p></div>
         <select value={selection} onChange={(event) => setSelection(event.target.value)}>
-          {nodes.length > 0 && <optgroup label="Nodes">{nodes.map((node) => <option value={`node:${node.id}`} key={node.id}>{node.name}</option>)}</optgroup>}
-          {applications.length > 0 && <optgroup label="Applications">{applications.map((application) => <option value={`application:${application.id}`} key={application.id}>{application.name}</option>)}</optgroup>}
+          {infrastructure
+            ? nodes.map((node) => <option value={`node:${node.id}`} key={node.id}>{node.name}</option>)
+            : applications.map((application) => <option value={`application:${application.id}`} key={application.id}>{application.name}</option>)}
         </select>
         <select value={range} onChange={(event) => setRange(event.target.value)}><option value="1h">Last hour</option><option value="24h">Last 24 hours</option><option value="7d">Last 7 days</option><option value="30d">Last 30 days</option></select>
       </section>
@@ -268,11 +300,13 @@ export function MonitoringPage({ team }) {
         </>}
       </div>
 
-      <div className="monitor-section-heading"><div><h2>Application policies</h2><p>Health checks and overrides; empty limits inherit the workspace plan.</p></div></div>
-      <div className="monitor-app-grid">
-        {applications.map((application) => <ApplicationMonitorCard key={application.id} application={application} canWrite={canWrite} onChange={updateApplication} onSave={saveApplication} busy={busy} />)}
-        {applications.length === 0 && <div className="empty-row">No applications available for monitoring.</div>}
-      </div>
+      {!infrastructure && <>
+        <div className="monitor-section-heading"><div><h2>Application policies</h2><p>Health checks and overrides; empty limits inherit the workspace plan.</p></div></div>
+        <div className="monitor-app-grid">
+          {applications.map((application) => <ApplicationMonitorCard key={application.id} application={application} canWrite={canWrite} onChange={updateApplication} onSave={saveApplication} busy={busy} />)}
+          {applications.length === 0 && <div className="empty-row">No applications available for monitoring.</div>}
+        </div>
+      </>}
 
       <div className="monitor-bottom-grid">
         <section className="settings-card alert-history">
@@ -286,17 +320,23 @@ export function MonitoringPage({ team }) {
         {settings && <form className="settings-card monitoring-settings" onSubmit={saveSettings}>
           <div className="settings-card-head"><div className="integration-icon cloudflare-icon"><BellRing size={20} /></div><div><h3>Rules and delivery</h3><p>Workspace defaults and alert channels</p></div></div>
           <div className="monitor-settings-grid">
-            <LimitInput label="Default CPU" unit="%" value={settings.defaults.cpuPercent} onChange={(value) => setSettings({ ...settings, defaults: { ...settings.defaults, cpuPercent: value } })} />
-            <LimitInput label="Default memory" unit="MB" value={settings.defaults.memoryMb} onChange={(value) => setSettings({ ...settings, defaults: { ...settings.defaults, memoryMb: value } })} />
-            <LimitInput label="Default storage" unit="GB" value={settings.defaults.storageGb} onChange={(value) => setSettings({ ...settings, defaults: { ...settings.defaults, storageGb: value } })} />
-            <LimitInput label="Default monthly traffic" unit="GB" value={settings.defaults.monthlyTrafficGb} onChange={(value) => setSettings({ ...settings, defaults: { ...settings.defaults, monthlyTrafficGb: value } })} />
+            {!infrastructure && <>
+              <LimitInput label="Default CPU" unit="%" value={settings.defaults.cpuPercent} onChange={(value) => setSettings({ ...settings, defaults: { ...settings.defaults, cpuPercent: value } })} />
+              <LimitInput label="Default memory" unit="MB" value={settings.defaults.memoryMb} onChange={(value) => setSettings({ ...settings, defaults: { ...settings.defaults, memoryMb: value } })} />
+              <LimitInput label="Default storage" unit="GB" value={settings.defaults.storageGb} onChange={(value) => setSettings({ ...settings, defaults: { ...settings.defaults, storageGb: value } })} />
+              <LimitInput label="Default monthly traffic" unit="GB" value={settings.defaults.monthlyTrafficGb} onChange={(value) => setSettings({ ...settings, defaults: { ...settings.defaults, monthlyTrafficGb: value } })} />
+            </>}
             <label className="monitor-field"><span>Retention</span><div className="unit-input"><input type="number" min="1" max="365" value={settings.retentionDays} onChange={(event) => setSettings({ ...settings, retentionDays: Number(event.target.value) })} /><small>days</small></div></label>
-            <label className="monitor-field"><span>Node offline after</span><div className="unit-input"><input type="number" min="30" max="3600" value={settings.nodeOfflineSeconds} onChange={(event) => setSettings({ ...settings, nodeOfflineSeconds: Number(event.target.value) })} /><small>sec</small></div></label>
-            <label className="monitor-field"><span>Failed checks before alert</span><input type="number" min="1" max="20" value={settings.healthFailureThreshold} onChange={(event) => setSettings({ ...settings, healthFailureThreshold: Number(event.target.value) })} /></label>
+            {infrastructure
+              ? <label className="monitor-field"><span>Node offline after</span><div className="unit-input"><input type="number" min="30" max="3600" value={settings.nodeOfflineSeconds} onChange={(event) => setSettings({ ...settings, nodeOfflineSeconds: Number(event.target.value) })} /><small>sec</small></div></label>
+              : <label className="monitor-field"><span>Failed checks before alert</span><input type="number" min="1" max="20" value={settings.healthFailureThreshold} onChange={(event) => setSettings({ ...settings, healthFailureThreshold: Number(event.target.value) })} /></label>}
             <label className="monitor-field"><span>Reminder cooldown</span><div className="unit-input"><input type="number" min="1" max="1440" value={settings.cooldownMinutes} onChange={(event) => setSettings({ ...settings, cooldownMinutes: Number(event.target.value) })} /><small>min</small></div></label>
           </div>
           <div className="rule-checks">
-            {[["notifyNodeOffline", "Node offline"], ["notifyApplicationDown", "Application down"], ["notifyResourceLimit", "Resource limit"], ["notifyRecovery", "Recovery"]].map(([key, label]) => <label key={key}><input type="checkbox" checked={settings[key]} onChange={(event) => setSettings({ ...settings, [key]: event.target.checked })} /> {label}</label>)}
+            {(infrastructure
+              ? [["notifyNodeOffline", "Node offline"], ["notifyRecovery", "Recovery"]]
+              : [["notifyApplicationDown", "Application down"], ["notifyResourceLimit", "Resource limit"], ["notifyRecovery", "Recovery"]]
+            ).map(([key, label]) => <label key={key}><input type="checkbox" checked={settings[key]} onChange={(event) => setSettings({ ...settings, [key]: event.target.checked })} /> {label}</label>)}
           </div>
           <div className="channel-block">
             <label><input type="checkbox" checked={settings.panelEnabled} onChange={(event) => setSettings({ ...settings, panelEnabled: event.target.checked })} /> Panel notifications</label>

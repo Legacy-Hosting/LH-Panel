@@ -4,15 +4,12 @@ import {
   ExternalLink,
   GitBranch,
   LoaderCircle,
-  ShieldCheck,
-  Users,
 } from "lucide-react";
 import { panelApi } from "../api/client.js";
 import { useFeedback } from "../components/FeedbackProvider.jsx";
 
-export function SettingsPage({ user }) {
+export function SettingsPage() {
   const feedback = useFeedback();
-  const [registration, setRegistration] = useState(null);
   const [cloudflare, setCloudflare] = useState([]);
   const [github, setGithub] = useState([]);
   const [busy, setBusy] = useState("");
@@ -50,13 +47,10 @@ export function SettingsPage({ user }) {
           panelApi.cloudflareConnections(),
           panelApi.githubConnections(),
         ];
-        if (user.isPlatformAdmin) tasks.push(panelApi.registrationSettings());
-        const [connections, githubConnections, settings] =
-          await Promise.all(tasks);
+        const [connections, githubConnections] = await Promise.all(tasks);
         if (!active) return;
         setCloudflare(connections.data);
         setGithub(githubConnections.data);
-        if (settings) setRegistration(settings.data);
       } catch (caught) {
         if (active) setError(caught.message || "Could not load settings");
       }
@@ -65,22 +59,7 @@ export function SettingsPage({ user }) {
     return () => {
       active = false;
     };
-  }, [user.isPlatformAdmin]);
-
-  async function saveRegistration(event) {
-    event.preventDefault();
-    setBusy("registration");
-    setError("");
-    try {
-      const response = await panelApi.updateRegistrationSettings(registration);
-      setRegistration(response.data);
-      feedback.success("Registration settings saved.");
-    } catch (caught) {
-      feedback.error(caught.message || "Could not update registration");
-    } finally {
-      setBusy("");
-    }
-  }
+  }, []);
 
   async function connectCloudflare() {
     setBusy("cloudflare");
@@ -198,54 +177,6 @@ export function SettingsPage({ user }) {
         </section>
       </div>
 
-      {user.isPlatformAdmin && registration && (
-        <>
-          <div className="settings-heading registration-heading">
-            <div>
-              <h2>Platform access</h2>
-              <p>Control who can create a Legacy Hosting account.</p>
-            </div>
-          </div>
-          <form
-            className="settings-card registration-card"
-            onSubmit={saveRegistration}
-          >
-            <div className="settings-card-head">
-              <div className="integration-icon access-icon">
-                <Users size={21} />
-              </div>
-              <div>
-                <h3>Registration</h3>
-                <p>Applies across every Legacy Hosting product</p>
-              </div>
-            </div>
-            <label className="setting-field">
-              <span>Registration mode</span>
-              <select
-                value={registration.mode}
-                onChange={(event) =>
-                  setRegistration({ ...registration, mode: event.target.value })
-                }
-              >
-                <option value="closed">Closed</option>
-                <option value="invite_only">Invitation only</option>
-                <option value="open">Open</option>
-              </select>
-            </label>
-            <button
-              className="primary save-settings"
-              disabled={busy === "registration"}
-            >
-              {busy === "registration" ? (
-                <LoaderCircle className="spin" size={16} />
-              ) : (
-                <ShieldCheck size={16} />
-              )}
-              Save access settings
-            </button>
-          </form>
-        </>
-      )}
     </div>
   );
 }

@@ -35,6 +35,7 @@ function label(value) {
 
 export function ApplicationsPage({
   team,
+  isPlatformAdmin,
   initialApplicationId,
   onApplicationSelect,
 }) {
@@ -381,11 +382,31 @@ export function ApplicationsPage({
               </div>
 
               <div className="detail-facts">
-                <div><small>Node</small><b>{detail.nodeName}</b><span>{label(detail.nodeStatus)}</span></div>
-                <div><small>Internal port</small><b>{detail.internalPort || "—"}</b><span>Loopback only</span></div>
+                {isPlatformAdmin && <div><small>Node</small><b>{detail.nodeName}</b><span>{label(detail.nodeStatus)}</span></div>}
+                {isPlatformAdmin && <div><small>Primary port</small><b>{detail.internalPort || "—"}</b><span>Auto-assigned</span></div>}
                 <div><small>Origin TLS</small><b>{label(detail.proxyStatus)}</b><span>{displayDate(detail.certificateExpiresAt)}</span></div>
                 <div><small>Repository</small><b>{detail.repository || "Manual"}</b><span>{detail.branch}</span></div>
+                <div><small>Processes</small><b>{detail.processes?.length || 1}</b><span>Managed by PM2</span></div>
+                <div><small>Hostnames</small><b>{detail.hostnames?.length || 1}</b><span>Cloudflare + TLS</span></div>
               </div>
+
+              {detail.processes?.length > 0 && (
+                <section className="detail-section">
+                  <div className="detail-section-head">
+                    <div><h3>Processes</h3><p>All services deploy from the same repository and release.</p></div>
+                  </div>
+                  <div className="application-process-list">
+                    {detail.processes.map((process) => (
+                      <div className="application-process-row" key={process.id}>
+                        <span><b>{process.name}</b><small>{process.type}{process.primary ? " · main domain" : ""}</small></span>
+                        <code>{process.executable} {process.arguments.join(" ")}</code>
+                        <span><b>{process.hostname || (process.public ? detail.hostname : "Internal only")}</b><small>{["web", "api"].includes(process.type) ? (isPlatformAdmin && process.internalPort ? `Auto port ${process.internalPort}` : "Auto-assigned port") : "No port"}</small></span>
+                        <span className={`process-runtime-status ${process.status || "missing"}`}><i></i>{process.status || "Waiting for agent"}</span>
+                      </div>
+                    ))}
+                  </div>
+                </section>
+              )}
 
               <section className="detail-section">
                 <div className="detail-section-head">

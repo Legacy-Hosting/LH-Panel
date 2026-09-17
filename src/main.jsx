@@ -16,6 +16,7 @@ import {
   Search,
   Server,
   Settings,
+  Shield,
   Terminal,
   Trash2,
   Users,
@@ -33,6 +34,7 @@ import { DeploymentsPage } from "./pages/DeploymentsPage.jsx";
 import { NotificationMenu } from "./components/NotificationMenu.jsx";
 import { WorkspaceSwitcher } from "./components/WorkspaceSwitcher.jsx";
 import { MonitoringPage } from "./pages/MonitoringPage.jsx";
+import { AdminSettingsPage } from "./pages/AdminSettingsPage.jsx";
 import { PANEL_VERSION } from "./version.js";
 import {
   FeedbackProvider,
@@ -42,12 +44,12 @@ import {
 const nav = [
   { label: "Overview", icon: LayoutDashboard, path: "/" },
   { label: "Applications", icon: Box, path: "/applications" },
-  { label: "Nodes", icon: Server, path: "/nodes" },
   { label: "Domains", icon: Globe2, path: "/domains" },
   { label: "Deployments", icon: GitBranch, path: "/deployments" },
   { label: "Monitoring", icon: Activity, path: "/monitoring" },
   { label: "Team", icon: Users, path: "/team" },
 ];
+const adminNav = { label: "Admin", icon: Shield, path: "/admin/nodes" };
 const secondaryRoutes = [
   { label: "Settings", path: "/settings" },
   { label: "Documentation", path: "/documentation" },
@@ -84,6 +86,13 @@ function routeFromPathname(pathname = window.location.pathname) {
     };
   }
 
+  const adminMatch = normalized.match(
+    /^\/admin(?:\/(nodes|monitoring|settings))?$/,
+  );
+  if (adminMatch) {
+    return { page: "Admin", adminSection: adminMatch[1] || "nodes" };
+  }
+
   if (normalized.startsWith("/settings")) return { page: "Settings" };
   const route = [...nav, ...secondaryRoutes].find(
     (candidate) => candidate.path === normalized,
@@ -111,6 +120,7 @@ function App() {
     user.teams?.find((team) => team.id === activeTeamId) || user.teams?.[0];
   const [route, setRoute] = useState(routeFromPathname);
   const page = route.page;
+  const visibleNav = user.isPlatformAdmin ? [...nav, adminNav] : nav;
   const [query, setQuery] = useState("");
   const [apps, setApps] = useState([]);
   const [nodes, setNodes] = useState([]);
@@ -138,6 +148,11 @@ function App() {
     return () => window.removeEventListener("popstate", handlePopState);
   }, []);
   useEffect(() => {
+    if (page === "Admin" && !user.isPlatformAdmin) {
+      navigate("/", { replace: true });
+    }
+  }, [navigate, page, user.isPlatformAdmin]);
+  useEffect(() => {
     if (selectedTeam?.id && activeTeamId !== selectedTeam.id) {
       panelApi.selectTeam(selectedTeam.id);
       setActiveTeamId(selectedTeam.id);
@@ -156,7 +171,9 @@ function App() {
       ] = await Promise.all([
         panelApi.applications(),
         panelApi.overview(),
-        panelApi.nodes(),
+        user.isPlatformAdmin
+          ? panelApi.nodes()
+          : Promise.resolve({ data: [] }),
         panelApi.deployments(),
       ]);
       if (window.localStorage.getItem("lh_active_team") !== teamId) return;
@@ -169,7 +186,7 @@ function App() {
       if (window.localStorage.getItem("lh_active_team") !== teamId) return;
       setDataError(error.message || "Could not load workspace data");
     }
-  }, [selectedTeam?.id]);
+  }, [selectedTeam?.id, user.isPlatformAdmin]);
   useEffect(() => {
     loadDashboard();
     const timer = window.setInterval(loadDashboard, 30_000);
@@ -246,7 +263,7 @@ function App() {
           />
         </div>
         <nav>
-          {nav.map(({ label, icon: Icon, path }) => (
+          {visibleNav.map(({ label, icon: Icon, path }) => (
             <a
               className={page === label ? "active" : ""}
               href={path}
@@ -360,19 +377,19 @@ function App() {
               onAction={applicationAction}
               onDelete={deleteApplication}
               onNavigate={navigate}
+              isPlatformAdmin={user.isPlatformAdmin}
             />
           ) : page === "Settings" ? (
-            <SettingsPage user={user} />
+            <SettingsPage />
           ) : page === "Applications" ? (
             <ApplicationsPage
               team={selectedTeam}
+              isPlatformAdmin={user.isPlatformAdmin}
               initialApplicationId={route.applicationId}
               onApplicationSelect={(applicationId, options) =>
                 navigate(`/applications/${encodeURIComponent(applicationId)}`, options)
               }
             />
-          ) : page === "Nodes" ? (
-            <NodesPage />
           ) : page === "Domains" ? (
             <DomainsPage />
           ) : page === "Team" ? (
@@ -381,6 +398,12 @@ function App() {
             <DeploymentsPage />
           ) : page === "Monitoring" ? (
             <MonitoringPage team={selectedTeam} />
+          ) : page === "Admin" && user.isPlatformAdmin ? (
+            <AdminPage
+              section={route.adminSection}
+              team={selectedTeam}
+              onNavigate={navigate}
+            />
           ) : (
             <Placeholder page={page} />
           )}
@@ -409,6 +432,7 @@ function Overview({
   onAction,
   onDelete,
   onNavigate,
+  isPlatformAdmin,
 }) {
   return (
     <>
@@ -422,26 +446,32 @@ function Overview({
               ? "Your applications are healthy"
               : "Your infrastructure needs attention"}
           </h2>
-          <p>Monitor deployments, nodes, and domains from one place.</p>
+          <p>
+            {isPlatformAdmin
+              ? "Monitor deployments, nodes, and domains from one place."
+              : "Monitor applications, deployments, and domains from one place."}
+          </p>
         </div>
         <button className="secondary" onClick={onRefresh}>
           <RefreshCw size={16} /> Refresh data
         </button>
       </section>
       {dataError && <div className="data-error">{dataError}</div>}
-      <div className="stats">
+      <div className={`stats ${isPlatformAdmin ? "" : "customer-stats"}`}>
         <Stat
           label="Applications"
           value={stats.applications}
           note={`${stats.runningApplications} running`}
           icon={Box}
         />
-        <Stat
-          label="Nodes"
-          value={stats.nodes}
-          note={`${stats.onlineNodes} online`}
-          icon={Server}
-        />
+        {isPlatformAdmin && (
+          <Stat
+            label="Nodes"
+            value={stats.nodes}
+            note={`${stats.onlineNodes} online`}
+            icon={Server}
+          />
+        )}
         <Stat
           label="Domains"
           value={stats.domains}
@@ -537,8 +567,8 @@ function Overview({
             </div>
           ))}
       </div>
-      <div className="lower">
-        <section className="card">
+      <div className={`lower ${isPlatformAdmin ? "" : "customer-lower"}`}>
+        {isPlatformAdmin && <section className="card">
           <div className="card-title">
             <div>
               <h3>Node health</h3>
@@ -546,11 +576,11 @@ function Overview({
             </div>
             <a
               className="link"
-              href="/nodes"
+              href="/admin/nodes"
               onClick={(event) => {
                 if (!isPlainNavigation(event)) return;
                 event.preventDefault();
-                onNavigate("/nodes");
+                onNavigate("/admin/nodes");
               }}
             >
               View nodes
@@ -562,7 +592,7 @@ function Overview({
           {nodes.slice(0, 3).map((node) => (
             <Node key={node.id} {...node} />
           ))}
-        </section>
+        </section>}
         <section className="card">
           <div className="card-title">
             <div>
@@ -595,6 +625,45 @@ function Overview({
         </section>
       </div>
     </>
+  );
+}
+
+function AdminPage({ section, team, onNavigate }) {
+  const tabs = [
+    { id: "nodes", label: "Nodes", path: "/admin/nodes" },
+    {
+      id: "monitoring",
+      label: "Infrastructure monitoring",
+      path: "/admin/monitoring",
+    },
+    { id: "settings", label: "Platform access", path: "/admin/settings" },
+  ];
+  return (
+    <div className="admin-page">
+      <div className="admin-tabs" aria-label="Administration">
+        {tabs.map((tab) => (
+          <a
+            className={section === tab.id ? "active" : ""}
+            href={tab.path}
+            key={tab.id}
+            onClick={(event) => {
+              if (!isPlainNavigation(event)) return;
+              event.preventDefault();
+              onNavigate(tab.path);
+            }}
+          >
+            {tab.label}
+          </a>
+        ))}
+      </div>
+      {section === "monitoring" ? (
+        <MonitoringPage team={team} infrastructure />
+      ) : section === "settings" ? (
+        <AdminSettingsPage />
+      ) : (
+        <NodesPage />
+      )}
+    </div>
   );
 }
 function Stat({ label, value, note, icon: Icon }) {
