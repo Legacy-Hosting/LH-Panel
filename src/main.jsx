@@ -32,6 +32,7 @@ import { ApplicationsPage } from "./pages/ApplicationsPage.jsx";
 import { DeploymentsPage } from "./pages/DeploymentsPage.jsx";
 import { NotificationMenu } from "./components/NotificationMenu.jsx";
 import { MonitoringPage } from "./pages/MonitoringPage.jsx";
+import { PANEL_VERSION } from "./version.js";
 
 const nav = [
   { label: "Overview", icon: LayoutDashboard, path: "/" },
@@ -267,6 +268,13 @@ function App() {
               <Search size={18} />
             </button>
             <NotificationMenu />
+            <button
+              className="icon-btn mobile-logout"
+              onClick={logout}
+              title="Sign out"
+            >
+              <LogOut size={18} />
+            </button>
             <button className={`status ${systemStatus}`}>
               <span></span>{" "}
               {systemStatus === "operational"
@@ -631,7 +639,7 @@ function Footer() {
   const time = `${osloParts.day}.${osloParts.month}.${osloParts.year} ${osloParts.hour}:${osloParts.minute}:${osloParts.second}`;
   return (
     <footer>
-      <span>LH-Panel v1.0.0</span>
+      <span>LH-Panel v{PANEL_VERSION}</span>
       <span>
         Copyright 2009 © {osloParts.year}{" "}
         <a href="https://legacyhosting.xyz" target="_blank" rel="noreferrer">

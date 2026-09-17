@@ -81,6 +81,7 @@ test("desktop shell keeps navigation and footer visible", async ({ page }, testI
   test.skip(testInfo.project.name !== "desktop-chromium", "desktop only");
   await expect(page.locator("aside")).toBeVisible();
   await expect(page.locator("footer")).toBeVisible();
+  await expect(page.getByText("LH-Panel v1.0.3")).toBeVisible();
   await expect(page.getByRole("button", { name: "New application" })).toBeVisible();
   const overflow = await page
     .locator("body")
@@ -109,5 +110,23 @@ test("navigation keeps its page URL after a reload", async ({ page }) => {
   await expect(page).toHaveURL(/\/domains$/);
   await expect(
     page.getByRole("heading", { name: "Domains", exact: true }).first(),
+  ).toBeVisible();
+});
+
+test("logout sends a bodyless request without a JSON content type", async ({
+  page,
+}) => {
+  const logoutRequest = page.waitForRequest(
+    (request) =>
+      new URL(request.url()).pathname === "/api/v1/auth/logout" &&
+      request.method() === "POST",
+  );
+
+  await page.locator('button[title="Sign out"]:visible').click();
+  const request = await logoutRequest;
+
+  expect(request.headers()["content-type"]).toBeUndefined();
+  await expect(
+    page.getByRole("heading", { name: "Welcome back" }),
   ).toBeVisible();
 });

@@ -19,6 +19,7 @@ import {
   UserRound,
 } from "lucide-react";
 import { panelApi } from "../api/client.js";
+import { PANEL_VERSION } from "../version.js";
 
 const AuthContext = createContext(null);
 
@@ -218,7 +219,7 @@ function AuthScreen({ registration, startupError, onAuthenticated }) {
             nodes with passwordless security.
           </p>
         </div>
-        <div className="auth-foot">LH-Panel v1.0.0</div>
+        <div className="auth-foot">LH-Panel v{PANEL_VERSION}</div>
       </section>
       <main className="auth-main">
         <div className="auth-card">

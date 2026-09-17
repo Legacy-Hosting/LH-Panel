@@ -262,6 +262,9 @@ h3 {
   padding: 9px;
   color: #a7a8b5;
 }
+.mobile-logout {
+  display: none;
+}
 .primary {
   background: var(--purple);
   border-color: var(--purple);
@@ -730,6 +733,9 @@ footer a:hover {
   .header-actions .icon-btn,
   .header-actions .status {
     display: none;
+  }
+  .header-actions .mobile-logout {
+    display: grid;
   }
   .header-actions .primary {
     width: 38px;

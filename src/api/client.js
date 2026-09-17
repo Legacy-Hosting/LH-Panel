@@ -19,6 +19,7 @@ async function request(path, options = {}) {
   const { headers: optionHeaders, ...requestOptions } = options;
   const teamId = window.localStorage.getItem("lh_active_team");
   const method = (requestOptions.method || "GET").toUpperCase();
+  const hasBody = requestOptions.body !== undefined && requestOptions.body !== null;
   const unauthenticatedAuth = [
     "/auth/register/options",
     "/auth/register/verify",
@@ -33,7 +34,7 @@ async function request(path, options = {}) {
     credentials: "include",
     ...requestOptions,
     headers: {
-      "Content-Type": "application/json",
+      ...(hasBody ? { "Content-Type": "application/json" } : {}),
       ...(teamId ? { "X-Team-ID": teamId } : {}),
       ...(requestCsrfToken ? { "X-CSRF-Token": requestCsrfToken } : {}),
       ...optionHeaders,
