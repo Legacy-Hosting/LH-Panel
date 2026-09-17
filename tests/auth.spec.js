@@ -60,6 +60,7 @@ test("administrator registration fits mobile width without horizontal overflow",
   await expect(
     page.getByRole("heading", { name: "Create the administrator" }),
   ).toBeVisible();
+  await expect(page.locator(".auth-intro")).toBeHidden();
   const overflow = await page
     .locator("#root")
     .evaluate((element) => element.scrollWidth - element.clientWidth);
