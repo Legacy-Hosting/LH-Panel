@@ -90,10 +90,24 @@ test("desktop shell keeps navigation and footer visible", async ({ page }, testI
 
 test("mobile shell has no horizontal scrolling", async ({ page }, testInfo) => {
   test.skip(testInfo.project.name !== "mobile-chromium", "mobile only");
-  await expect(page.getByRole("button", { name: "Overview" })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Overview" })).toBeVisible();
   await expect(page.locator("footer")).toBeVisible();
   const overflow = await page
     .locator("#root")
     .evaluate((element) => element.scrollWidth - element.clientWidth);
   expect(overflow).toBeLessThanOrEqual(1);
+});
+
+test("navigation keeps its page URL after a reload", async ({ page }) => {
+  await page.getByRole("link", { name: "Domains" }).click();
+  await expect(page).toHaveURL(/\/domains$/);
+  await expect(
+    page.getByRole("heading", { name: "Domains", exact: true }).first(),
+  ).toBeVisible();
+
+  await page.reload();
+  await expect(page).toHaveURL(/\/domains$/);
+  await expect(
+    page.getByRole("heading", { name: "Domains", exact: true }).first(),
+  ).toBeVisible();
 });

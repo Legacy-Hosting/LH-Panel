@@ -34,13 +34,17 @@ import { NotificationMenu } from "./components/NotificationMenu.jsx";
 import { MonitoringPage } from "./pages/MonitoringPage.jsx";
 
 const nav = [
-  ["Overview", LayoutDashboard],
-  ["Applications", Box],
-  ["Nodes", Server],
-  ["Domains", Globe2],
-  ["Deployments", GitBranch],
-  ["Monitoring", Activity],
-  ["Team", Users],
+  { label: "Overview", icon: LayoutDashboard, path: "/" },
+  { label: "Applications", icon: Box, path: "/applications" },
+  { label: "Nodes", icon: Server, path: "/nodes" },
+  { label: "Domains", icon: Globe2, path: "/domains" },
+  { label: "Deployments", icon: GitBranch, path: "/deployments" },
+  { label: "Monitoring", icon: Activity, path: "/monitoring" },
+  { label: "Team", icon: Users, path: "/team" },
+];
+const secondaryRoutes = [
+  { label: "Settings", path: "/settings" },
+  { label: "Documentation", path: "/documentation" },
 ];
 const emptyStats = {
   applications: 0,
@@ -64,15 +68,41 @@ function relativeTime(value) {
   return formatter.format(Math.round(hours / 24), "day");
 }
 
+function routeFromPathname(pathname = window.location.pathname) {
+  const normalized = pathname.replace(/\/+$/, "") || "/";
+  const applicationMatch = normalized.match(/^\/applications\/([^/]+)$/);
+  if (applicationMatch) {
+    return {
+      page: "Applications",
+      applicationId: decodeURIComponent(applicationMatch[1]),
+    };
+  }
+
+  if (normalized.startsWith("/settings")) return { page: "Settings" };
+  const route = [...nav, ...secondaryRoutes].find(
+    (candidate) => candidate.path === normalized,
+  );
+  return { page: route?.label || "Overview" };
+}
+
+function isPlainNavigation(event) {
+  return (
+    event.button === 0 &&
+    !event.metaKey &&
+    !event.ctrlKey &&
+    !event.shiftKey &&
+    !event.altKey
+  );
+}
+
 function App() {
   const { user, logout } = useAuth();
   const selectedTeam =
     user.teams?.find(
       (team) => team.id === window.localStorage.getItem("lh_active_team"),
     ) || user.teams?.[0];
-  const [page, setPage] = useState(
-    window.location.pathname.startsWith("/settings") ? "Settings" : "Overview",
-  );
+  const [route, setRoute] = useState(routeFromPathname);
+  const page = route.page;
   const [query, setQuery] = useState("");
   const [apps, setApps] = useState([]);
   const [nodes, setNodes] = useState([]);
@@ -81,6 +111,24 @@ function App() {
   const [systemStatus, setSystemStatus] = useState("operational");
   const [dataError, setDataError] = useState("");
   const [showCreateApplication, setShowCreateApplication] = useState(false);
+  const navigate = useCallback((path, options = {}) => {
+    const method = options.replace ? "replaceState" : "pushState";
+    window.history[method]({}, "", path);
+    setRoute(routeFromPathname(path));
+  }, []);
+  const followLink = useCallback(
+    (event, path) => {
+      if (!isPlainNavigation(event)) return;
+      event.preventDefault();
+      navigate(path);
+    },
+    [navigate],
+  );
+  useEffect(() => {
+    const handlePopState = () => setRoute(routeFromPathname());
+    window.addEventListener("popstate", handlePopState);
+    return () => window.removeEventListener("popstate", handlePopState);
+  }, []);
   const loadDashboard = useCallback(async () => {
     setDataError("");
     try {
@@ -150,26 +198,35 @@ function App() {
           <ChevronDown size={15} />
         </div>
         <nav>
-          {nav.map(([label, Icon]) => (
-            <button
+          {nav.map(({ label, icon: Icon, path }) => (
+            <a
               className={page === label ? "active" : ""}
-              onClick={() => setPage(label)}
-              key={label}
+              href={path}
+              onClick={(event) => followLink(event, path)}
+              key={path}
             >
               <Icon size={17} />
               {label}
-            </button>
+            </a>
           ))}
         </nav>
         <div className="aside-bottom">
-          <button onClick={() => setPage("Settings")}>
+          <a
+            className={page === "Settings" ? "active" : ""}
+            href="/settings"
+            onClick={(event) => followLink(event, "/settings")}
+          >
             <Settings size={17} />
             Settings
-          </button>
-          <button>
+          </a>
+          <a
+            className={page === "Documentation" ? "active" : ""}
+            href="/documentation"
+            onClick={(event) => followLink(event, "/documentation")}
+          >
             <CircleHelp size={17} />
             Documentation
-          </button>
+          </a>
           <div className="profile">
             <div className="avatar">
               {user.displayName
@@ -238,11 +295,18 @@ function App() {
               onRefresh={loadDashboard}
               onAction={applicationAction}
               onDelete={deleteApplication}
+              onNavigate={navigate}
             />
           ) : page === "Settings" ? (
             <SettingsPage user={user} />
           ) : page === "Applications" ? (
-            <ApplicationsPage team={selectedTeam} />
+            <ApplicationsPage
+              team={selectedTeam}
+              initialApplicationId={route.applicationId}
+              onApplicationSelect={(applicationId, options) =>
+                navigate(`/applications/${encodeURIComponent(applicationId)}`, options)
+              }
+            />
           ) : page === "Nodes" ? (
             <NodesPage />
           ) : page === "Domains" ? (
@@ -279,6 +343,7 @@ function Overview({
   onRefresh,
   onAction,
   onDelete,
+  onNavigate,
 }) {
   return (
     <>
@@ -357,13 +422,21 @@ function Overview({
               <div className={"app-logo " + a.color}>
                 <Code2 size={19} />
               </div>
-              <div className="app-name">
+              <a
+                className="app-name app-name-link"
+                href={`/applications/${encodeURIComponent(a.id)}`}
+                onClick={(event) => {
+                  if (!isPlainNavigation(event)) return;
+                  event.preventDefault();
+                  onNavigate(`/applications/${encodeURIComponent(a.id)}`);
+                }}
+              >
                 <b>{a.name}</b>
                 <span>
                   <Globe2 size={13} />
                   {a.domain}
                 </span>
-              </div>
+              </a>
               <div className="pill">
                 <i className={a.status === "Running" ? "green" : "gray"}></i>
                 {a.status}
@@ -406,7 +479,17 @@ function Overview({
               <h3>Node health</h3>
               <p>Resource usage across your infrastructure</p>
             </div>
-            <button className="link">View nodes</button>
+            <a
+              className="link"
+              href="/nodes"
+              onClick={(event) => {
+                if (!isPlainNavigation(event)) return;
+                event.preventDefault();
+                onNavigate("/nodes");
+              }}
+            >
+              View nodes
+            </a>
           </div>
           {nodes.length === 0 && (
             <div className="empty-card">No nodes yet.</div>
@@ -421,7 +504,17 @@ function Overview({
               <h3>Recent activity</h3>
               <p>Latest changes in your workspace</p>
             </div>
-            <button className="link">View all</button>
+            <a
+              className="link"
+              href="/deployments"
+              onClick={(event) => {
+                if (!isPlainNavigation(event)) return;
+                event.preventDefault();
+                onNavigate("/deployments");
+              }}
+            >
+              View all
+            </a>
           </div>
           {deployments.length === 0 && (
             <div className="empty-card">No deployment activity yet.</div>

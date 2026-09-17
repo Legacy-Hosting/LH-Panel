@@ -32,7 +32,11 @@ function label(value) {
     .replace(/\b\w/g, (letter) => letter.toUpperCase());
 }
 
-export function ApplicationsPage({ team, initialApplicationId }) {
+export function ApplicationsPage({
+  team,
+  initialApplicationId,
+  onApplicationSelect,
+}) {
   const [applications, setApplications] = useState([]);
   const [selectedId, setSelectedId] = useState(initialApplicationId || "");
   const [detail, setDetail] = useState(null);
@@ -72,6 +76,9 @@ export function ApplicationsPage({ team, initialApplicationId }) {
     try {
       const id = await loadApplications(initialApplicationId || selectedId);
       await loadDetail(id);
+      if (id && !initialApplicationId) {
+        onApplicationSelect?.(id, { replace: true });
+      }
     } catch (caught) {
       setError(caught.message || "Could not load applications");
     }
@@ -84,13 +91,19 @@ export function ApplicationsPage({ team, initialApplicationId }) {
     };
   }, []);
 
-  async function select(applicationId) {
+  useEffect(() => {
+    if (!initialApplicationId || initialApplicationId === selectedId) return;
+    select(initialApplicationId, false);
+  }, [initialApplicationId]);
+
+  async function select(applicationId, updateRoute = true) {
     streamController.current?.abort();
     setSelectedId(applicationId);
     setBusy("");
     setLogs("");
     setLogStatus("");
     setError("");
+    if (updateRoute) onApplicationSelect?.(applicationId);
     try {
       await loadDetail(applicationId);
     } catch (caught) {
@@ -268,9 +281,21 @@ export function ApplicationsPage({ team, initialApplicationId }) {
               <div className="empty-row">No applications yet.</div>
             )}
             {applications.map((application) => (
-              <button
+              <a
                 className={`browser-app ${selectedId === application.id ? "active" : ""}`}
-                onClick={() => select(application.id)}
+                href={`/applications/${encodeURIComponent(application.id)}`}
+                onClick={(event) => {
+                  if (
+                    event.button !== 0 ||
+                    event.metaKey ||
+                    event.ctrlKey ||
+                    event.shiftKey ||
+                    event.altKey
+                  )
+                    return;
+                  event.preventDefault();
+                  select(application.id);
+                }}
                 key={application.id}
               >
                 <span className="resource-symbol">
@@ -281,7 +306,7 @@ export function ApplicationsPage({ team, initialApplicationId }) {
                   <small>{application.domain}</small>
                 </span>
                 <i className={application.status === "Running" ? "green" : "gray"}></i>
-              </button>
+              </a>
             ))}
           </div>
         </section>
