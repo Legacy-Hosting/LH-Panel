@@ -118,19 +118,32 @@ export function ApplicationsPage({
     const controller = new AbortController();
     streamController.current = controller;
     try {
-      await panelApi.streamApplicationCommand(
-        applicationId,
-        commandId,
-        (snapshot) => {
-          setLogs(snapshot.output || "Waiting for output from the node…");
-          setLogStatus(
-            snapshot.cancelRequestedAt
-              ? "Cancellation requested"
-              : label(snapshot.status),
-          );
-        },
-        controller.signal,
-      );
+      while (!controller.signal.aborted) {
+        const response = await panelApi.applicationCommand(
+          applicationId,
+          commandId,
+        );
+        const snapshot = response.data;
+        setLogs(snapshot.output || "Waiting for output from the node…");
+        setLogStatus(
+          snapshot.cancelRequestedAt
+            ? "Cancellation requested"
+            : label(snapshot.status),
+        );
+        if (["succeeded", "failed", "cancelled"].includes(snapshot.status))
+          break;
+        await new Promise((resolve, reject) => {
+          const onAbort = () => {
+            window.clearTimeout(timeout);
+            reject(new DOMException("Aborted", "AbortError"));
+          };
+          const timeout = window.setTimeout(() => {
+            controller.signal.removeEventListener("abort", onAbort);
+            resolve();
+          }, 1_000);
+          controller.signal.addEventListener("abort", onAbort, { once: true });
+        });
+      }
       await Promise.all([
         loadApplications(applicationId),
         loadDetail(applicationId),
