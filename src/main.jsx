@@ -10,6 +10,7 @@ import {
   Globe2,
   LayoutDashboard,
   LogOut,
+  Pencil,
   Play,
   Plus,
   RefreshCw,
@@ -25,6 +26,7 @@ import { panelApi } from "./api/client.js";
 import { AuthGate, useAuth } from "./auth/AuthGate.jsx";
 import { SettingsPage } from "./pages/SettingsPage.jsx";
 import { CreateApplicationModal } from "./components/CreateApplicationModal.jsx";
+import { EditApplicationModal } from "./components/EditApplicationModal.jsx";
 import { NodesPage } from "./pages/NodesPage.jsx";
 import { TeamPage } from "./pages/TeamPage.jsx";
 import { DomainsPage } from "./pages/DomainsPage.jsx";
@@ -127,6 +129,8 @@ function App() {
   const [systemStatus, setSystemStatus] = useState("operational");
   const [dataError, setDataError] = useState("");
   const [showCreateApplication, setShowCreateApplication] = useState(false);
+  const [editingApplicationId, setEditingApplicationId] = useState("");
+  const [applicationRevision, setApplicationRevision] = useState(0);
   const navigate = useCallback((path, options = {}) => {
     const method = options.replace ? "replaceState" : "pushState";
     window.history[method]({}, "", path);
@@ -236,6 +240,7 @@ function App() {
     setStats(emptyStats);
     setDataError("");
     setShowCreateApplication(false);
+    setEditingApplicationId("");
     if (route.applicationId) navigate("/applications", { replace: true });
   }
   async function handleTeamCreated(team) {
@@ -374,7 +379,11 @@ function App() {
               onRefresh={loadDashboard}
               onAction={applicationAction}
               onDelete={deleteApplication}
+              onEdit={setEditingApplicationId}
               onNavigate={navigate}
+              canMutate={["owner", "administrator", "developer"].includes(
+                selectedTeam?.role,
+              )}
             />
           ) : page === "Settings" ? (
             <SettingsPage />
@@ -383,6 +392,8 @@ function App() {
               team={selectedTeam}
               isPlatformAdmin={user.isPlatformAdmin}
               initialApplicationId={route.applicationId}
+              refreshKey={applicationRevision}
+              onEdit={setEditingApplicationId}
               onApplicationSelect={(applicationId, options) =>
                 navigate(`/applications/${encodeURIComponent(applicationId)}`, options)
               }
@@ -413,6 +424,14 @@ function App() {
         onClose={() => setShowCreateApplication(false)}
         onCreated={loadDashboard}
       />
+      <EditApplicationModal
+        applicationId={editingApplicationId}
+        onClose={() => setEditingApplicationId("")}
+        onUpdated={async () => {
+          setApplicationRevision((current) => current + 1);
+          await loadDashboard();
+        }}
+      />
     </div>
   );
 }
@@ -427,7 +446,9 @@ function Overview({
   onRefresh,
   onAction,
   onDelete,
+  onEdit,
   onNavigate,
+  canMutate,
 }) {
   return (
     <>
@@ -540,6 +561,16 @@ function Overview({
               >
                 <Play size={15} />
               </button>
+              {canMutate && (
+                <button
+                  className="row-action"
+                  onClick={() => onEdit(a.id)}
+                  title="Edit application"
+                  aria-label={`Edit ${a.name}`}
+                >
+                  <Pencil size={15} />
+                </button>
+              )}
               <button
                 className="row-action danger-action"
                 onClick={() => onDelete(a)}

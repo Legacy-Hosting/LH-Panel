@@ -73,6 +73,53 @@ async function mockApi(page, { isPlatformAdmin = true } = {}) {
       });
       return;
     }
+    if (
+      path ===
+        "/api/v1/panel/applications/33333333-3333-4333-8333-333333333333" &&
+      request.method() === "PATCH"
+    ) {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({ data: { updated: true } }),
+      });
+      return;
+    }
+    if (
+      path ===
+        "/api/v1/panel/applications/33333333-3333-4333-8333-333333333333" &&
+      request.method() === "GET"
+    ) {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          data: {
+            id: "33333333-3333-4333-8333-333333333333",
+            name: "portal",
+            hostname: "portal.example.com",
+            repository: "NextarchStudio/Bifrost",
+            branch: "main",
+            autoDeploy: true,
+            runtime: {
+              install: { command: "pnpm", args: ["install", "--frozen-lockfile"] },
+              build: { command: "pnpm", args: ["build"] },
+              checks: [{ command: "pnpm", args: ["test"] }],
+            },
+            persistentPaths: [
+              { type: "file", path: "V2/var/secrets/settings.key" },
+            ],
+            environment: [],
+            processes: [],
+            deployments: [],
+            hostnames: [{ hostname: "portal.example.com", primary: true }],
+            status: "running",
+            proxyStatus: "active",
+          },
+        }),
+      });
+      return;
+    }
     const responses = {
       "/api/v1/auth/me": {
         data: {
@@ -207,6 +254,44 @@ test("navigation keeps its page URL after a reload", async ({ page }) => {
   await expect(page).toHaveURL(/\/domains$/);
   await expect(
     page.getByRole("heading", { name: "Domains", exact: true }).first(),
+  ).toBeVisible();
+});
+
+test("application settings can be edited from the overview", async ({ page }) => {
+  await page.getByRole("button", { name: "Edit portal" }).click();
+  const dialog = page.getByRole("dialog", { name: "Edit application" });
+  await expect(dialog).toBeVisible();
+  await expect(dialog.getByLabel("Application name")).toHaveValue("portal");
+  await expect(dialog.getByLabel("Branch")).toHaveValue("main");
+  await expect(dialog.getByLabel("Install command")).toHaveValue(
+    "pnpm install --frozen-lockfile",
+  );
+
+  await dialog.getByLabel("Application name").fill("portal-next");
+  await dialog.getByLabel("Branch").fill("production");
+  const updateRequest = page.waitForRequest(
+    (request) =>
+      new URL(request.url()).pathname ===
+        "/api/v1/panel/applications/33333333-3333-4333-8333-333333333333" &&
+      request.method() === "PATCH",
+  );
+  await dialog.getByRole("button", { name: "Save changes" }).click();
+  const payload = (await updateRequest).postDataJSON();
+
+  expect(payload).toMatchObject({
+    name: "portal-next",
+    branch: "production",
+    autoDeploy: true,
+    installCommand: {
+      command: "pnpm",
+      args: ["install", "--frozen-lockfile"],
+    },
+    persistentPaths: [
+      { type: "file", path: "V2/var/secrets/settings.key" },
+    ],
+  });
+  await expect(
+    page.getByRole("status").filter({ hasText: "portal-next was updated" }),
   ).toBeVisible();
 });
 

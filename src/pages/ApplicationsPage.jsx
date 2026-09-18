@@ -6,6 +6,7 @@ import {
   KeyRound,
   LoaderCircle,
   Pause,
+  Pencil,
   Play,
   RefreshCw,
   RotateCcw,
@@ -37,6 +38,8 @@ export function ApplicationsPage({
   team,
   isPlatformAdmin,
   initialApplicationId,
+  refreshKey,
+  onEdit,
   onApplicationSelect,
 }) {
   const feedback = useFeedback();
@@ -91,7 +94,7 @@ export function ApplicationsPage({
     return () => {
       streamController.current?.abort();
     };
-  }, []);
+  }, [refreshKey]);
 
   useEffect(() => {
     if (!initialApplicationId || initialApplicationId === selectedId) return;
@@ -368,6 +371,13 @@ export function ApplicationsPage({
                 </div>
                 {canMutate && (
                   <div className="detail-actions">
+                    <button
+                      className="secondary"
+                      onClick={() => onEdit?.(detail.id)}
+                      disabled={Boolean(busy)}
+                    >
+                      <Pencil size={14} /> Edit
+                    </button>
                     <button
                       className="secondary"
                       onClick={() => action(detail.status === "stopped" ? "start" : "stop")}

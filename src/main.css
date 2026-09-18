@@ -1497,6 +1497,33 @@ footer a:hover {
 .application-modal {
   width: min(1040px, 100%);
 }
+.application-settings-modal {
+  width: min(760px, 100%);
+}
+.modal-loading {
+  min-height: 180px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  color: var(--muted);
+  font-size: 12px;
+}
+.application-edit-context {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  border: 1px solid #292a34;
+  border-radius: 9px;
+  padding: 11px 13px;
+  background: #101116;
+  color: var(--muted);
+  font-size: 12px;
+}
+.application-edit-context b {
+  color: #dfe0e7;
+  overflow-wrap: anywhere;
+}
 .modal-head {
   display: flex;
   align-items: start;

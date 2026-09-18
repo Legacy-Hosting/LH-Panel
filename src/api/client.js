@@ -197,6 +197,11 @@ export const panelApi = {
       method: "POST",
       body: JSON.stringify(body),
     }),
+  updateApplication: (applicationId, body) =>
+    request(`/panel/applications/${applicationId}`, {
+      method: "PATCH",
+      body: JSON.stringify(body),
+    }),
   applicationAction: (applicationId, action) =>
     request(`/panel/applications/${applicationId}/actions/${action}`, {
       method: "POST",
