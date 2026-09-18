@@ -2591,6 +2591,15 @@ footer a:hover {
   padding: 11px 13px;
   border-bottom: 1px solid #252630;
 }
+.deployment-page-item {
+  border-bottom: 1px solid #252630;
+}
+.deployment-page-item:last-child {
+  border: 0;
+}
+.deployment-page-item .deployment-page-row {
+  border: 0;
+}
 .notification-menu {
   position: relative;
 }
@@ -2717,8 +2726,7 @@ footer a:hover {
   justify-content: end;
   gap: 6px;
 }
-.deployment-history-row:last-child,
-.deployment-page-row:last-child {
+.deployment-history-row:last-child {
   border: 0;
 }
 .deployment-history-row > div b,
@@ -2742,7 +2750,34 @@ footer a:hover {
   grid-template-columns: 36px minmax(150px, 1fr) minmax(100px, 0.6fr) minmax(
       170px,
       0.8fr
-    ) 90px;
+    ) 90px auto;
+}
+.deployment-log-toggle {
+  white-space: nowrap;
+}
+.deployment-build-log {
+  padding: 0 13px 14px 58px;
+}
+.deployment-build-log-head {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 14px;
+  margin-bottom: 9px;
+}
+.deployment-build-log-head h3 {
+  font-size: 12px;
+}
+.deployment-build-log-head p {
+  margin-top: 3px;
+  color: var(--muted);
+  font-size: 9px;
+}
+.deployment-build-log .data-error {
+  margin-bottom: 9px;
+}
+.deployment-build-log .log-viewer {
+  min-height: 210px;
 }
 
 @media (max-width: 980px) {
@@ -2784,10 +2819,13 @@ footer a:hover {
     grid-template-columns: 1fr;
   }
   .deployment-page-row {
-    grid-template-columns: 34px minmax(0, 1fr) 85px;
+    grid-template-columns: 34px minmax(0, 1fr) 85px auto;
   }
   .deployment-page-row .resource-detail {
     display: none;
+  }
+  .deployment-build-log {
+    padding-left: 13px;
   }
   .application-process-row {
     grid-template-columns: minmax(90px, 0.8fr) minmax(130px, 1.2fr) auto;
@@ -2796,6 +2834,20 @@ footer a:hover {
 }
 
 @media (max-width: 480px) {
+  .deployment-page-row {
+    grid-template-columns: 34px minmax(0, 1fr) 85px;
+  }
+  .deployment-log-toggle {
+    grid-column: 2 / -1;
+    width: 100%;
+  }
+  .deployment-build-log-head {
+    align-items: stretch;
+    flex-direction: column;
+  }
+  .deployment-build-log-head button {
+    width: 100%;
+  }
   .browser-list {
     grid-template-columns: 1fr;
   }

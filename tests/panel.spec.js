@@ -30,6 +30,7 @@ async function mockApi(page, { isPlatformAdmin = true } = {}) {
   let teamName = team.name;
   let teams = [{ ...team }];
   let repositoryRefreshes = 0;
+  let buildLogRequests = 0;
   await page.route("http://localhost:8080/api/v1/**", async (route) => {
     const request = route.request();
     const path = new URL(request.url()).pathname;
@@ -138,6 +139,31 @@ async function mockApi(page, { isPlatformAdmin = true } = {}) {
         contentType: "application/json",
         body: JSON.stringify({
           data: { status: "succeeded", output: "Persistent file initialized" },
+        }),
+      });
+      return;
+    }
+    if (
+      path ===
+        "/api/v1/panel/applications/33333333-3333-4333-8333-333333333333/commands/cccccccc-cccc-4ccc-8ccc-cccccccccccc" &&
+      request.method() === "GET"
+    ) {
+      buildLogRequests += 1;
+      const running = buildLogRequests === 1;
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          data: {
+            id: "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+            status: running ? "leased" : "failed",
+            output: running
+              ? "> pnpm install\nResolving packages…"
+              : "> pnpm build\nTypeScript error: Property 'name' does not exist\nELIFECYCLE Command failed with exit code 2",
+            startedAt: "2026-09-18T10:00:00.000Z",
+            finishedAt: running ? null : "2026-09-18T10:00:08.000Z",
+            cancelRequestedAt: null,
+          },
         }),
       });
       return;
@@ -259,7 +285,20 @@ async function mockApi(page, { isPlatformAdmin = true } = {}) {
           { id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", name: "tg.no" },
         ],
       },
-      "/api/v1/panel/deployments": { data: [] },
+      "/api/v1/panel/deployments": {
+        data: [
+          {
+            id: "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
+            applicationId: "33333333-3333-4333-8333-333333333333",
+            applicationName: "portal",
+            commandId: "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+            commitSha: "1a2b3c4d5e6f7890",
+            source: "manual",
+            status: "building",
+            createdAt: "2026-09-18T10:00:00.000Z",
+          },
+        ],
+      },
       "/api/v1/panel/notifications": { data: [], meta: { unread: 0 } },
     };
     await route.fulfill({
@@ -312,6 +351,19 @@ test("navigation keeps its page URL after a reload", async ({ page }) => {
   await expect(
     page.getByRole("heading", { name: "Domains", exact: true }).first(),
   ).toBeVisible();
+});
+
+test("deployment history shows captured build output", async ({ page }) => {
+  await page.getByRole("link", { name: "Deployments" }).click();
+  await expect(page).toHaveURL(/\/deployments$/);
+  await page.getByRole("button", { name: "Show build logs for portal" }).click();
+
+  const logs = page.getByRole("region", { name: "Build logs for portal" });
+  await expect(logs).toBeVisible();
+  await expect(logs.getByText("Resolving packages…")).toBeVisible();
+  await expect(logs.getByText("TypeScript error: Property 'name' does not exist")).toBeVisible();
+  await expect(logs.getByText("ELIFECYCLE Command failed with exit code 2")).toBeVisible();
+  await expect(logs.locator(".deployment-build-log-head p")).toContainText("Failed");
 });
 
 test("application settings can be edited from the overview", async ({ page }) => {

@@ -253,6 +253,8 @@ export const panelApi = {
     request(`/panel/nodes/${nodeId}/rotate-token`, { method: "POST" }),
   domains: () => request("/panel/domains"),
   deployments: () => request("/panel/deployments"),
+  deploymentLogs: (applicationId, commandId) =>
+    request(`/panel/applications/${applicationId}/commands/${commandId}`),
   cancelDeployment: (deploymentId) =>
     request(`/panel/deployments/${deploymentId}/cancel`, { method: "POST" }),
   notifications: () => request("/panel/notifications"),
