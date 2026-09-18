@@ -568,7 +568,7 @@ h3 {
   display: grid;
   grid-template-columns:
     35px minmax(170px, 1.9fr)
-    110px 80px 100px 130px 30px 30px;
+    110px 80px 100px 130px auto;
   gap: 14px;
   align-items: center;
   padding: 15px 17px;
@@ -651,6 +651,13 @@ h3 {
 .row-action {
   color: var(--muted);
   padding: 6px;
+}
+.app-row-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 4px;
+  white-space: nowrap;
 }
 .lower {
   display: grid;
@@ -806,7 +813,7 @@ footer a:hover {
     --sidebar: 210px;
   }
   .app-row {
-    grid-template-columns: 35px minmax(150px, 1fr) 95px 75px 92px 30px 30px;
+    grid-template-columns: 35px minmax(150px, 1fr) 95px 75px 92px auto;
   }
   .deploy {
     display: none;
@@ -959,13 +966,13 @@ footer a:hover {
     width: 100%;
   }
   .app-row {
-    grid-template-columns: 35px minmax(0, 1fr) 78px 30px;
+    grid-template-columns: 35px minmax(0, 1fr) 78px auto;
     gap: 8px;
     padding: 13px 12px;
   }
   .metric,
   .deploy,
-  .app-row .row-action:first-of-type {
+  .app-row-actions .row-action:first-child {
     display: none;
   }
   .lower {
@@ -1011,7 +1018,7 @@ footer a:hover {
     width: 100%;
   }
   .app-row {
-    grid-template-columns: 35px minmax(0, 1fr) 30px;
+    grid-template-columns: 35px minmax(0, 1fr) auto;
   }
   .pill {
     grid-column: 2;

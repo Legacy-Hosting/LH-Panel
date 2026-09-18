@@ -552,32 +552,37 @@ function Overview({
                 <small>Last deployment</small>
                 <b>{relativeTime(a.deploy)}</b>
               </div>
-              <button
-                className="row-action"
-                onClick={() =>
-                  onAction(a.id, a.status === "Stopped" ? "start" : "restart")
-                }
-                title={a.status === "Stopped" ? "Start" : "Restart"}
-              >
-                <Play size={15} />
-              </button>
-              {canMutate && (
+              <div className="app-row-actions">
                 <button
                   className="row-action"
-                  onClick={() => onEdit(a.id)}
-                  title="Edit application"
-                  aria-label={`Edit ${a.name}`}
+                  onClick={() =>
+                    onAction(
+                      a.id,
+                      a.status === "Stopped" ? "start" : "restart",
+                    )
+                  }
+                  title={a.status === "Stopped" ? "Start" : "Restart"}
                 >
-                  <Pencil size={15} />
+                  <Play size={15} />
                 </button>
-              )}
-              <button
-                className="row-action danger-action"
-                onClick={() => onDelete(a)}
-                title="Delete application"
-              >
-                <Trash2 size={15} />
-              </button>
+                {canMutate && (
+                  <button
+                    className="row-action"
+                    onClick={() => onEdit(a.id)}
+                    title="Edit application"
+                    aria-label={`Edit ${a.name}`}
+                  >
+                    <Pencil size={15} />
+                  </button>
+                )}
+                <button
+                  className="row-action danger-action"
+                  onClick={() => onDelete(a)}
+                  title="Delete application"
+                >
+                  <Trash2 size={15} />
+                </button>
+              </div>
             </div>
           ))}
       </div>

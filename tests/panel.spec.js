@@ -258,7 +258,17 @@ test("navigation keeps its page URL after a reload", async ({ page }) => {
 });
 
 test("application settings can be edited from the overview", async ({ page }) => {
-  await page.getByRole("button", { name: "Edit portal" }).click();
+  const editButton = page.getByRole("button", { name: "Edit portal" });
+  const deleteButton = page.getByRole("button", { name: "Delete application" });
+  const [editBox, deleteBox] = await Promise.all([
+    editButton.boundingBox(),
+    deleteButton.boundingBox(),
+  ]);
+  expect(editBox).not.toBeNull();
+  expect(deleteBox).not.toBeNull();
+  expect(Math.abs(editBox.y - deleteBox.y)).toBeLessThanOrEqual(1);
+
+  await editButton.click();
   const dialog = page.getByRole("dialog", { name: "Edit application" });
   await expect(dialog).toBeVisible();
   await expect(dialog.getByLabel("Application name")).toHaveValue("portal");
