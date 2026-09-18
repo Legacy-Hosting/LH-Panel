@@ -62,6 +62,25 @@ function lines(value) {
     .filter(Boolean);
 }
 
+export function applicationHostname(subdomain, rootDomain) {
+  const root = rootDomain.trim().toLowerCase();
+  const value = subdomain.trim().toLowerCase().replace(/^\.+|\.+$/g, "");
+  if (!root) return value;
+  if (!value) return root;
+  if (value === root || value.endsWith(`.${root}`)) return value;
+  return `${value}.${root}`;
+}
+
+function hostnamePrefix(value, rootDomain) {
+  const normalized = value.trim().toLowerCase().replace(/^\.+|\.+$/g, "");
+  const root = rootDomain.trim().toLowerCase();
+  if (!root) return normalized;
+  if (normalized === root) return "";
+  return normalized.endsWith(`.${root}`)
+    ? normalized.slice(0, -(root.length + 1))
+    : normalized;
+}
+
 const defaultProcesses = [
   {
     name: "web",
@@ -148,14 +167,18 @@ export function CreateApplicationModal({ open, onClose, onCreated }) {
     persistentPaths: "",
   });
   const [busy, setBusy] = useState(false);
+  const [loadingRepositories, setLoadingRepositories] = useState(false);
   const [error, setError] = useState("");
 
   useEffect(() => {
     if (!open) return;
     let active = true;
+    setError("");
+    setRepositories([]);
+    setLoadingRepositories(true);
     Promise.all([
       panelApi.applicationTargets(),
-      panelApi.githubRepositories(),
+      panelApi.refreshGithubRepositories(),
       panelApi.cloudflareZones(),
     ])
       .then(([nodeResponse, repositoryResponse, zoneResponse]) => {
@@ -167,11 +190,19 @@ export function CreateApplicationModal({ open, onClose, onCreated }) {
           ...current,
           nodeId: current.nodeId || nodeResponse.data[0]?.id || "",
           rootDomain: current.rootDomain || zoneResponse.data[0]?.name || "",
+          repository: repositoryResponse.data.some(
+            (repository) => repository.fullName === current.repository,
+          )
+            ? current.repository
+            : "",
         }));
       })
-      .catch((caught) =>
-        setError(caught.message || "Could not load form data"),
-      );
+      .catch((caught) => {
+        if (active) setError(caught.message || "Could not load form data");
+      })
+      .finally(() => {
+        if (active) setLoadingRepositories(false);
+      });
     return () => {
       active = false;
     };
@@ -268,7 +299,7 @@ export function CreateApplicationModal({ open, onClose, onCreated }) {
         repository: form.repository || undefined,
         branch: form.branch,
         rootDomain: form.rootDomain,
-        domain: form.domain,
+        domain: applicationHostname(form.domain, form.rootDomain),
         autoDeploy: form.autoDeploy,
         environment: parseEnvironment(form.environment),
         processes,
@@ -379,19 +410,33 @@ export function CreateApplicationModal({ open, onClose, onCreated }) {
           </div>
           <label>
             <span>Hostname</span>
-            <div className="auth-input">
+            <div className="auth-input hostname-input">
               <Globe2 size={16} />
               <input
-                required
+                aria-label="Hostname"
                 value={form.domain}
                 onChange={(event) =>
-                  setForm({ ...form, domain: event.target.value.toLowerCase() })
+                  setForm({
+                    ...form,
+                    domain: hostnamePrefix(
+                      event.target.value,
+                      form.rootDomain,
+                    ),
+                  })
                 }
-                placeholder={
-                  form.rootDomain ? `app.${form.rootDomain}` : "app.example.com"
-                }
+                pattern="[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:[.][a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)*"
+                placeholder="Root domain"
               />
+              {form.rootDomain && (
+                <span className="hostname-suffix">
+                  {form.domain ? `.${form.rootDomain}` : form.rootDomain}
+                </span>
+              )}
             </div>
+            <small>
+              Leave blank to use the zone itself. Enter only a subdomain such
+              as <code>app</code> or <code>api.dev</code>.
+            </small>
           </label>
           <div className="form-grid">
             <label>
@@ -400,6 +445,7 @@ export function CreateApplicationModal({ open, onClose, onCreated }) {
                 <GitBranch size={16} />
                 <select
                   required
+                  disabled={loadingRepositories}
                   value={form.repository}
                   onChange={(event) => {
                     const repository = repositories.find(
@@ -413,7 +459,11 @@ export function CreateApplicationModal({ open, onClose, onCreated }) {
                     });
                   }}
                 >
-                  <option value="">Select a repository</option>
+                  <option value="">
+                    {loadingRepositories
+                      ? "Refreshing repositories…"
+                      : "Select a repository"}
+                  </option>
                   {repositories.map((repository) => (
                     <option value={repository.fullName} key={repository.id}>
                       {repository.fullName}
@@ -424,6 +474,9 @@ export function CreateApplicationModal({ open, onClose, onCreated }) {
                   ))}
                 </select>
               </div>
+              <small>
+                Refreshed from repositories available to the GitHub App.
+              </small>
             </label>
             <label>
               <span>Branch</span>

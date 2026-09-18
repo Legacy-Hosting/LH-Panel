@@ -29,6 +29,7 @@ const nodeAgent = {
 async function mockApi(page, { isPlatformAdmin = true } = {}) {
   let teamName = team.name;
   let teams = [{ ...team }];
+  let repositoryRefreshes = 0;
   await page.route("http://localhost:8080/api/v1/**", async (route) => {
     const request = route.request();
     const path = new URL(request.url()).pathname;
@@ -59,6 +60,31 @@ async function mockApi(page, { isPlatformAdmin = true } = {}) {
         status: 201,
         contentType: "application/json",
         body: JSON.stringify({ data: { agent: nodeAgent } }),
+      });
+      return;
+    }
+    if (
+      path === "/api/v1/integrations/github/repositories/refresh" &&
+      request.method() === "POST"
+    ) {
+      repositoryRefreshes += 1;
+      const repositories = [
+        {
+          id: "88888888-8888-4888-8888-888888888888",
+          fullName: "NextarchStudio/Bifrost",
+          metadata: { defaultBranch: "main", private: true },
+        },
+      ];
+      if (repositoryRefreshes > 1)
+        repositories.push({
+          id: "77777777-8888-4888-8888-888888888888",
+          fullName: "NextarchStudio/Vaktleder",
+          metadata: { defaultBranch: "main", private: true },
+        });
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({ data: repositories }),
       });
       return;
     }
@@ -554,7 +580,7 @@ test("multiple PM2 processes never submit customer-selected ports", async ({ pag
   await page.getByRole("button", { name: "New application" }).click();
   const dialog = page.getByRole("dialog", { name: "New application" });
   await dialog.getByLabel("Application name").fill("bifrost");
-  await dialog.getByLabel("Hostname", { exact: true }).fill("tg.legacyh.dev");
+  await dialog.getByLabel("Hostname", { exact: true }).fill("tg");
   await dialog.getByLabel("GitHub repository").selectOption("NextarchStudio/Bifrost");
   await dialog.getByLabel("Process setup").selectOption("multiple");
   await dialog.getByRole("textbox", { name: /^Additional hostnames/ }).fill("bifrost.tg.no");
@@ -568,6 +594,7 @@ test("multiple PM2 processes never submit customer-selected ports", async ({ pag
   const payload = (await createRequest).postDataJSON();
 
   expect(payload.nodeId).toBe("44444444-4444-4444-8444-444444444444");
+  expect(payload.domain).toBe("tg.legacyh.dev");
   expect(payload.additionalHostnames).toEqual(["bifrost.tg.no"]);
   expect(payload.processes.map((process) => process.type)).toEqual([
     "web",
@@ -577,6 +604,38 @@ test("multiple PM2 processes never submit customer-selected ports", async ({ pag
   expect(JSON.stringify(payload)).not.toContain("internalPort");
   expect(payload.environment.PORT).toBeUndefined();
   expect(payload.processes.every((process) => process.environment.PORT === undefined)).toBe(true);
+});
+
+test("new application refreshes GitHub repositories and uses the zone for an empty hostname", async ({
+  page,
+}) => {
+  await page.getByRole("button", { name: "New application" }).click();
+  let dialog = page.getByRole("dialog", { name: "New application" });
+  const repository = dialog.getByLabel("GitHub repository");
+  await expect(repository).toBeEnabled();
+  await expect(
+    repository.locator('option[value="NextarchStudio/Vaktleder"]'),
+  ).toHaveCount(0);
+
+  await dialog.getByRole("button", { name: "Close" }).click();
+  await page.getByRole("button", { name: "New application" }).click();
+  dialog = page.getByRole("dialog", { name: "New application" });
+  const refreshedRepository = dialog.getByLabel("GitHub repository");
+  await expect(refreshedRepository).toBeEnabled();
+  await expect(
+    refreshedRepository.locator('option[value="NextarchStudio/Vaktleder"]'),
+  ).toHaveCount(1);
+
+  await dialog.getByLabel("Application name").fill("vaktleder");
+  await refreshedRepository.selectOption("NextarchStudio/Vaktleder");
+  await expect(dialog.getByLabel("Hostname", { exact: true })).toHaveValue("");
+  const createRequest = page.waitForRequest(
+    (request) =>
+      new URL(request.url()).pathname === "/api/v1/panel/applications" &&
+      request.method() === "POST",
+  );
+  await dialog.getByRole("button", { name: "Create application" }).click();
+  expect((await createRequest).postDataJSON().domain).toBe("legacyh.dev");
 });
 
 test("customer accounts cannot access internal node administration", async ({ page }) => {

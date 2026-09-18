@@ -183,6 +183,8 @@ export const panelApi = {
     }),
   githubConnections: () => request("/integrations/github"),
   githubRepositories: () => request("/integrations/github/repositories"),
+  refreshGithubRepositories: () =>
+    request("/integrations/github/repositories/refresh", { method: "POST" }),
   githubConnect: (returnPath = "/settings/integrations") =>
     request("/integrations/github/connect", {
       method: "POST",

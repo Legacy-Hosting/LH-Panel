@@ -1190,6 +1190,19 @@ footer a:hover {
 .auth-input input::placeholder {
   color: #595b68;
 }
+.hostname-input input {
+  flex: 1 1 auto;
+  width: auto;
+}
+.hostname-suffix {
+  flex: 0 0 auto;
+  max-width: 58%;
+  overflow: hidden;
+  color: #aaa4d0;
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 .auth-submit {
   height: 44px;
   border-radius: 9px;
