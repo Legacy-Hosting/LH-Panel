@@ -583,6 +583,11 @@ test("multiple PM2 processes never submit customer-selected ports", async ({ pag
   await dialog.getByLabel("Hostname", { exact: true }).fill("tg");
   await dialog.getByLabel("GitHub repository").selectOption("NextarchStudio/Bifrost");
   await dialog.getByLabel("Process setup").selectOption("multiple");
+  const botName = dialog.getByLabel("Process name").nth(2);
+  await botName.fill("");
+  await botName.pressSequentially("discord-bot");
+  await expect(botName).toHaveValue("discord-bot");
+  await dialog.getByLabel("Type").nth(2).selectOption("bot");
   await dialog.getByRole("textbox", { name: /^Additional hostnames/ }).fill("bifrost.tg.no");
 
   const createRequest = page.waitForRequest(
@@ -599,7 +604,7 @@ test("multiple PM2 processes never submit customer-selected ports", async ({ pag
   expect(payload.processes.map((process) => process.type)).toEqual([
     "web",
     "api",
-    "worker",
+    "bot",
   ]);
   expect(JSON.stringify(payload)).not.toContain("internalPort");
   expect(payload.environment.PORT).toBeUndefined();

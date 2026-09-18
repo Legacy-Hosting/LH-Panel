@@ -83,6 +83,7 @@ function hostnamePrefix(value, rootDomain) {
 
 const defaultProcesses = [
   {
+    editorId: "default-web",
     name: "web",
     type: "web",
     workingDirectory: ".",
@@ -103,6 +104,7 @@ const defaultProcesses = [
     environment: "",
   },
   {
+    editorId: "default-api",
     name: "api",
     type: "api",
     workingDirectory: ".",
@@ -123,6 +125,7 @@ const defaultProcesses = [
     environment: "",
   },
   {
+    editorId: "default-worker",
     name: "worker",
     type: "worker",
     workingDirectory: ".",
@@ -244,6 +247,7 @@ export function CreateApplicationModal({ open, onClose, onCreated }) {
         ...current.processes,
         {
           ...defaultProcesses[2],
+          editorId: crypto.randomUUID(),
           name: `process-${current.processes.length + 1}`,
           startOrder: current.processes.length,
         },
@@ -517,7 +521,7 @@ export function CreateApplicationModal({ open, onClose, onCreated }) {
                 {form.processes.map((process, index) => {
                   const usesPort = ["web", "api"].includes(process.type);
                   return (
-                    <section className="process-card" key={`${process.name}-${index}`}>
+                    <section className="process-card" key={process.editorId}>
                       <div className="process-card-head">
                         <div>
                           <b>{process.name || `Process ${index + 1}`}</b>
@@ -565,6 +569,7 @@ export function CreateApplicationModal({ open, onClose, onCreated }) {
                           >
                             <option value="web">Web</option>
                             <option value="api">API</option>
+                            {!process.primary && <option value="bot">Bot</option>}
                             {!process.primary && <option value="worker">Worker</option>}
                             {!process.primary && <option value="custom">Custom</option>}
                           </select>
