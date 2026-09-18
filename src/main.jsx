@@ -14,7 +14,6 @@ import {
   Plus,
   RefreshCw,
   Search,
-  Server,
   Settings,
   Shield,
   Terminal,
@@ -36,6 +35,7 @@ import { WorkspaceSwitcher } from "./components/WorkspaceSwitcher.jsx";
 import { MonitoringPage } from "./pages/MonitoringPage.jsx";
 import { AdminSettingsPage } from "./pages/AdminSettingsPage.jsx";
 import { PANEL_VERSION } from "./version.js";
+import { greetingForHour } from "./greeting.js";
 import {
   FeedbackProvider,
   useFeedback,
@@ -57,8 +57,6 @@ const secondaryRoutes = [
 const emptyStats = {
   applications: 0,
   runningApplications: 0,
-  nodes: 0,
-  onlineNodes: 0,
   domains: 0,
   proxiedDomains: 0,
   deploymentsThisMonth: 0,
@@ -113,6 +111,7 @@ function isPlainNavigation(event) {
 function App() {
   const { user, logout, refresh } = useAuth();
   const feedback = useFeedback();
+  const [localHour, setLocalHour] = useState(() => new Date().getHours());
   const [activeTeamId, setActiveTeamId] = useState(
     () => window.localStorage.getItem("lh_active_team") || "",
   );
@@ -123,7 +122,6 @@ function App() {
   const visibleNav = user.isPlatformAdmin ? [...nav, adminNav] : nav;
   const [query, setQuery] = useState("");
   const [apps, setApps] = useState([]);
-  const [nodes, setNodes] = useState([]);
   const [deployments, setDeployments] = useState([]);
   const [stats, setStats] = useState(emptyStats);
   const [systemStatus, setSystemStatus] = useState("operational");
@@ -148,6 +146,17 @@ function App() {
     return () => window.removeEventListener("popstate", handlePopState);
   }, []);
   useEffect(() => {
+    const updateLocalHour = () => setLocalHour(new Date().getHours());
+    const timer = window.setInterval(updateLocalHour, 60_000);
+    window.addEventListener("focus", updateLocalHour);
+    document.addEventListener("visibilitychange", updateLocalHour);
+    return () => {
+      window.clearInterval(timer);
+      window.removeEventListener("focus", updateLocalHour);
+      document.removeEventListener("visibilitychange", updateLocalHour);
+    };
+  }, []);
+  useEffect(() => {
     if (page === "Admin" && !user.isPlatformAdmin) {
       navigate("/", { replace: true });
     }
@@ -163,30 +172,21 @@ function App() {
     if (!teamId) return;
     setDataError("");
     try {
-      const [
-        applicationResponse,
-        overviewResponse,
-        nodeResponse,
-        deploymentResponse,
-      ] = await Promise.all([
+      const [applicationResponse, overviewResponse, deploymentResponse] = await Promise.all([
         panelApi.applications(),
         panelApi.overview(),
-        user.isPlatformAdmin
-          ? panelApi.nodes()
-          : Promise.resolve({ data: [] }),
         panelApi.deployments(),
       ]);
       if (window.localStorage.getItem("lh_active_team") !== teamId) return;
       setApps(applicationResponse.data);
       setStats(overviewResponse.data.stats);
       setSystemStatus(overviewResponse.data.systemStatus);
-      setNodes(nodeResponse.data);
       setDeployments(deploymentResponse.data);
     } catch (error) {
       if (window.localStorage.getItem("lh_active_team") !== teamId) return;
       setDataError(error.message || "Could not load workspace data");
     }
-  }, [selectedTeam?.id, user.isPlatformAdmin]);
+  }, [selectedTeam?.id]);
   useEffect(() => {
     loadDashboard();
     const timer = window.setInterval(loadDashboard, 30_000);
@@ -232,7 +232,6 @@ function App() {
     panelApi.selectTeam(team.id);
     setActiveTeamId(team.id);
     setApps([]);
-    setNodes([]);
     setDeployments([]);
     setStats(emptyStats);
     setDataError("");
@@ -323,7 +322,7 @@ function App() {
             </div>
             <h1>
               {page === "Overview"
-                ? `Good afternoon, ${user.displayName.split(/\s+/)[0]}`
+                ? `${greetingForHour(localHour)}, ${user.displayName.split(/\s+/)[0]}`
                 : page}
             </h1>
           </div>
@@ -368,7 +367,6 @@ function App() {
               query={query}
               setQuery={setQuery}
               apps={apps}
-              nodes={nodes}
               deployments={deployments}
               stats={stats}
               systemStatus={systemStatus}
@@ -377,7 +375,6 @@ function App() {
               onAction={applicationAction}
               onDelete={deleteApplication}
               onNavigate={navigate}
-              isPlatformAdmin={user.isPlatformAdmin}
             />
           ) : page === "Settings" ? (
             <SettingsPage />
@@ -423,7 +420,6 @@ function Overview({
   query,
   setQuery,
   apps,
-  nodes,
   deployments,
   stats,
   systemStatus,
@@ -432,7 +428,6 @@ function Overview({
   onAction,
   onDelete,
   onNavigate,
-  isPlatformAdmin,
 }) {
   return (
     <>
@@ -446,32 +441,20 @@ function Overview({
               ? "Your applications are healthy"
               : "Your infrastructure needs attention"}
           </h2>
-          <p>
-            {isPlatformAdmin
-              ? "Monitor deployments, nodes, and domains from one place."
-              : "Monitor applications, deployments, and domains from one place."}
-          </p>
+          <p>Monitor applications, deployments, and domains from one place.</p>
         </div>
         <button className="secondary" onClick={onRefresh}>
           <RefreshCw size={16} /> Refresh data
         </button>
       </section>
       {dataError && <div className="data-error">{dataError}</div>}
-      <div className={`stats ${isPlatformAdmin ? "" : "customer-stats"}`}>
+      <div className="stats customer-stats">
         <Stat
           label="Applications"
           value={stats.applications}
           note={`${stats.runningApplications} running`}
           icon={Box}
         />
-        {isPlatformAdmin && (
-          <Stat
-            label="Nodes"
-            value={stats.nodes}
-            note={`${stats.onlineNodes} online`}
-            icon={Server}
-          />
-        )}
         <Stat
           label="Domains"
           value={stats.domains}
@@ -567,32 +550,7 @@ function Overview({
             </div>
           ))}
       </div>
-      <div className={`lower ${isPlatformAdmin ? "" : "customer-lower"}`}>
-        {isPlatformAdmin && <section className="card">
-          <div className="card-title">
-            <div>
-              <h3>Node health</h3>
-              <p>Resource usage across your infrastructure</p>
-            </div>
-            <a
-              className="link"
-              href="/admin/nodes"
-              onClick={(event) => {
-                if (!isPlainNavigation(event)) return;
-                event.preventDefault();
-                onNavigate("/admin/nodes");
-              }}
-            >
-              View nodes
-            </a>
-          </div>
-          {nodes.length === 0 && (
-            <div className="empty-card">No nodes yet.</div>
-          )}
-          {nodes.slice(0, 3).map((node) => (
-            <Node key={node.id} {...node} />
-          ))}
-        </section>}
+      <div className="lower customer-lower">
         <section className="card">
           <div className="card-title">
             <div>
@@ -676,37 +634,6 @@ function Stat({ label, value, note, icon: Icon }) {
         <small>{label}</small>
         <strong>{value}</strong>
         <span>{note}</span>
-      </div>
-    </div>
-  );
-}
-function Node({ name, region, status, memory, disk }) {
-  return (
-    <div className="node">
-      <div className="node-symbol">
-        <Server size={17} />
-      </div>
-      <div className="node-info">
-        <b>{name}</b>
-        <span>
-          {region || "Unknown region"} · {status}
-        </span>
-      </div>
-      <div className="bar">
-        <small>
-          Memory <b>{Number(memory || 0).toFixed(0)}%</b>
-        </small>
-        <div>
-          <i style={{ width: Math.min(Number(memory || 0), 100) + "%" }}></i>
-        </div>
-      </div>
-      <div className="bar">
-        <small>
-          Disk <b>{disk === null ? "—" : `${Number(disk).toFixed(0)}%`}</b>
-        </small>
-        <div>
-          <i style={{ width: Math.min(Number(disk || 0), 100) + "%" }}></i>
-        </div>
       </div>
     </div>
   );

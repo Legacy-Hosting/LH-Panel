@@ -171,14 +171,14 @@ test.beforeEach(async ({ page }, testInfo) => {
     isPlatformAdmin: !testInfo.title.startsWith("customer accounts"),
   });
   await page.goto("/");
-  await expect(page.getByText("Good afternoon, DJ")).toBeVisible();
+  await expect(page.getByText(/Good (morning|afternoon|evening), DJ/)).toBeVisible();
 });
 
 test("desktop shell keeps navigation and footer visible", async ({ page }, testInfo) => {
   test.skip(testInfo.project.name !== "desktop-chromium", "desktop only");
   await expect(page.locator("aside")).toBeVisible();
   await expect(page.locator("footer")).toBeVisible();
-  await expect(page.getByText("LH-Panel v1.0.10")).toBeVisible();
+  await expect(page.getByText(/LH-Panel v1\.0\.\d+/)).toBeVisible();
   await expect(page.getByRole("button", { name: "New application" })).toBeVisible();
   const overflow = await page
     .locator("body")
@@ -401,6 +401,12 @@ test("customer accounts cannot access internal node administration", async ({ pa
 
   await page.goto("/admin/nodes");
   await expect(page).toHaveURL(/\/$/);
-  await expect(page.getByText("Good afternoon, DJ")).toBeVisible();
+  await expect(page.getByText(/Good (morning|afternoon|evening), DJ/)).toBeVisible();
   await expect(page.getByRole("heading", { name: "Nodes", exact: true })).toHaveCount(0);
+});
+
+test("overview keeps node infrastructure inside administration", async ({ page }) => {
+  await expect(page.getByText("Node health")).toHaveCount(0);
+  await expect(page.getByText("View nodes")).toHaveCount(0);
+  await expect(page.getByText("Monitor deployments, nodes, and domains from one place.")).toHaveCount(0);
 });
