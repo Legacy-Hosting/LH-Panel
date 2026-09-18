@@ -210,6 +210,26 @@ test("navigation keeps its page URL after a reload", async ({ page }) => {
   ).toBeVisible();
 });
 
+test("notification menu closes after outside clicks and navigation", async ({
+  page,
+}, testInfo) => {
+  test.skip(testInfo.project.name !== "desktop-chromium", "desktop only");
+
+  const trigger = page.getByTitle("Notifications");
+  const popover = page.getByRole("dialog", { name: "Notifications" });
+
+  await trigger.click();
+  await expect(popover).toBeVisible();
+  await page.getByRole("heading", { name: /Good (morning|afternoon|evening), DJ/ }).click();
+  await expect(popover).toBeHidden();
+
+  await trigger.click();
+  await expect(popover).toBeVisible();
+  await page.getByRole("link", { name: "Domains" }).click();
+  await expect(page).toHaveURL(/\/domains$/);
+  await expect(popover).toBeHidden();
+});
+
 test("logout sends a bodyless request without a JSON content type", async ({
   page,
 }) => {
