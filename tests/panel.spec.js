@@ -87,6 +87,37 @@ async function mockApi(page, { isPlatformAdmin = true } = {}) {
     }
     if (
       path ===
+        "/api/v1/panel/applications/33333333-3333-4333-8333-333333333333/persistent-files" &&
+      request.method() === "POST"
+    ) {
+      await route.fulfill({
+        status: 202,
+        contentType: "application/json",
+        body: JSON.stringify({
+          data: {
+            commandId: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+            status: "queued",
+          },
+        }),
+      });
+      return;
+    }
+    if (
+      path ===
+        "/api/v1/panel/applications/33333333-3333-4333-8333-333333333333/commands/bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb" &&
+      request.method() === "GET"
+    ) {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          data: { status: "succeeded", output: "Persistent file initialized" },
+        }),
+      });
+      return;
+    }
+    if (
+      path ===
         "/api/v1/panel/applications/33333333-3333-4333-8333-333333333333" &&
       request.method() === "GET"
     ) {
@@ -302,6 +333,44 @@ test("application settings can be edited from the overview", async ({ page }) =>
   });
   await expect(
     page.getByRole("status").filter({ hasText: "portal-next was updated" }),
+  ).toBeVisible();
+});
+
+test("persistent secret files can be initialized without returning their value", async ({
+  page,
+}) => {
+  await page.getByRole("link", { name: /portal/ }).first().click();
+  await page.getByRole("button", { name: "Initialize file" }).click();
+  const dialog = page.getByRole("dialog", { name: "Initialize secret file" });
+  await expect(dialog).toBeVisible();
+  const secret = "replacement-secret-key";
+  await dialog.getByLabel("Secret file content").fill(secret);
+
+  const writeRequest = page.waitForRequest(
+    (request) =>
+      new URL(request.url()).pathname.endsWith("/persistent-files") &&
+      request.method() === "POST",
+  );
+  await dialog.getByRole("button", { name: "Initialize file" }).click();
+  const confirmation = page.getByRole("alertdialog");
+  await expect(
+    confirmation.getByRole("heading", {
+      name: "Replace V2/var/secrets/settings.key?",
+    }),
+  ).toBeVisible();
+  await confirmation.getByRole("button", { name: "Replace and restart" }).click();
+  const payload = (await writeRequest).postDataJSON();
+
+  expect(payload).toEqual({
+    path: "V2/var/secrets/settings.key",
+    content: secret,
+    restartProcesses: true,
+  });
+  await expect(dialog).toBeHidden();
+  await expect(
+    page
+      .getByRole("status")
+      .filter({ hasText: "Secret file updated and application processes restarted" }),
   ).toBeVisible();
 });
 

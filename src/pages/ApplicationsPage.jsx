@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import {
   Box,
   ExternalLink,
+  FileKey2,
   GitBranch,
   KeyRound,
   LoaderCircle,
@@ -17,6 +18,7 @@ import {
 } from "lucide-react";
 import { panelApi } from "../api/client.js";
 import { useFeedback } from "../components/FeedbackProvider.jsx";
+import { PersistentFileModal } from "../components/PersistentFileModal.jsx";
 
 function displayDate(value) {
   if (!value) return "—";
@@ -51,6 +53,7 @@ export function ApplicationsPage({
   const [busy, setBusy] = useState("");
   const [error, setError] = useState("");
   const [variable, setVariable] = useState({ key: "", value: "" });
+  const [persistentFilePath, setPersistentFilePath] = useState("");
   const streamController = useRef(null);
   const canMutate = ["owner", "administrator", "developer"].includes(
     team?.role,
@@ -103,6 +106,7 @@ export function ApplicationsPage({
 
   async function select(applicationId, updateRoute = true) {
     streamController.current?.abort();
+    setPersistentFilePath("");
     setSelectedId(applicationId);
     setBusy("");
     setLogs("");
@@ -431,6 +435,36 @@ export function ApplicationsPage({
                 </section>
               )}
 
+              {detail.persistentPaths?.length > 0 && (
+                <section className="detail-section">
+                  <div className="detail-section-head">
+                    <div>
+                      <h3>Persistent storage</h3>
+                      <p>Files and directories retained across deployments.</p>
+                    </div>
+                  </div>
+                  <div className="persistent-path-list">
+                    {detail.persistentPaths.map((item) => (
+                      <div className="persistent-path-row" key={item.path}>
+                        <FileKey2 size={15} />
+                        <span>
+                          <b>{item.path}</b>
+                          <small>{label(item.type)}</small>
+                        </span>
+                        {canMutate && item.type === "file" && (
+                          <button
+                            className="secondary compact-button"
+                            onClick={() => setPersistentFilePath(item.path)}
+                          >
+                            Initialize file
+                          </button>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </section>
+              )}
+
               <section className="detail-section">
                 <div className="detail-section-head">
                   <div><h3>Runtime logs</h3><p>Latest PM2 output from the assigned node.</p></div>
@@ -509,6 +543,12 @@ export function ApplicationsPage({
           )}
         </section>
       </div>
+      <PersistentFileModal
+        applicationId={detail?.id}
+        path={persistentFilePath}
+        onClose={() => setPersistentFilePath("")}
+        onCompleted={() => loadDetail(detail?.id)}
+      />
     </div>
   );
 }

@@ -202,6 +202,11 @@ export const panelApi = {
       method: "PATCH",
       body: JSON.stringify(body),
     }),
+  writePersistentFile: (applicationId, body) =>
+    request(`/panel/applications/${applicationId}/persistent-files`, {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
   applicationAction: (applicationId, action) =>
     request(`/panel/applications/${applicationId}/actions/${action}`, {
       method: "POST",
