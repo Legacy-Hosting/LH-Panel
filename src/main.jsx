@@ -127,6 +127,7 @@ function App() {
   const [deployments, setDeployments] = useState([]);
   const [stats, setStats] = useState(emptyStats);
   const [systemStatus, setSystemStatus] = useState("operational");
+  const [applicationTransitions, setApplicationTransitions] = useState({});
   const [dataError, setDataError] = useState("");
   const [showCreateApplication, setShowCreateApplication] = useState(false);
   const [editingApplicationId, setEditingApplicationId] = useState("");
@@ -185,10 +186,29 @@ function App() {
       setApps(applicationResponse.data);
       setStats(overviewResponse.data.stats);
       setSystemStatus(overviewResponse.data.systemStatus);
+      setDataError("");
       setDeployments(deploymentResponse.data);
     } catch (error) {
       if (window.localStorage.getItem("lh_active_team") !== teamId) return;
       setDataError(error.message || "Could not load workspace data");
+    }
+  }, [selectedTeam?.id]);
+  const loadSystemSummary = useCallback(async () => {
+    const teamId = selectedTeam?.id;
+    if (!teamId) return;
+    try {
+      const [applicationResponse, overviewResponse] = await Promise.all([
+        panelApi.applications(),
+        panelApi.overview(),
+      ]);
+      if (window.localStorage.getItem("lh_active_team") !== teamId) return;
+      setApps(applicationResponse.data);
+      setStats(overviewResponse.data.stats);
+      setSystemStatus(overviewResponse.data.systemStatus);
+      setDataError("");
+    } catch (error) {
+      if (window.localStorage.getItem("lh_active_team") !== teamId) return;
+      setDataError(error.message || "Could not refresh system status");
     }
   }, [selectedTeam?.id]);
   useEffect(() => {
@@ -196,15 +216,53 @@ function App() {
     const timer = window.setInterval(loadDashboard, 30_000);
     return () => window.clearInterval(timer);
   }, [loadDashboard]);
+  useEffect(() => {
+    const timer = window.setInterval(() => {
+      if (document.visibilityState !== "hidden") loadSystemSummary();
+    }, 5_000);
+    return () => window.clearInterval(timer);
+  }, [loadSystemSummary]);
   async function applicationAction(applicationId, action) {
+    setApplicationTransitions((current) => ({
+      ...current,
+      [applicationId]: action === "start" ? "Starting" : "Restarting",
+    }));
     try {
-      await panelApi.applicationAction(applicationId, action);
+      const queued = await panelApi.applicationAction(applicationId, action);
       feedback.success(
         `Application ${action === "start" ? "start" : "restart"} queued.`,
       );
+      if (queued.data.commandId) {
+        let command = null;
+        for (let attempt = 0; attempt < 300; attempt += 1) {
+          const response = await panelApi.applicationCommand(
+            applicationId,
+            queued.data.commandId,
+          );
+          command = response.data;
+          await loadSystemSummary();
+          if (["succeeded", "failed", "cancelled"].includes(command.status)) break;
+          await new Promise((resolve) => window.setTimeout(resolve, 1_000));
+        }
+        if (command?.status !== "succeeded") {
+          throw new Error(
+            command?.output ||
+              (command
+                ? `Application ${action} ${command.status}.`
+                : `Application ${action} is still waiting for the node.`),
+          );
+        }
+      }
       await loadDashboard();
     } catch (error) {
       feedback.error(error.message || "Could not queue application action");
+      await loadSystemSummary();
+    } finally {
+      setApplicationTransitions((current) => {
+        const next = { ...current };
+        delete next[applicationId];
+        return next;
+      });
     }
   }
   async function deleteApplication(application) {
@@ -274,6 +332,7 @@ function App() {
     setApps([]);
     setDeployments([]);
     setStats(emptyStats);
+    setApplicationTransitions({});
     setDataError("");
     setShowCreateApplication(false);
     setEditingApplicationId("");
@@ -407,7 +466,11 @@ function App() {
             <Overview
               query={query}
               setQuery={setQuery}
-              apps={apps}
+              apps={apps.map((application) => ({
+                ...application,
+                status:
+                  applicationTransitions[application.id] || application.status,
+              }))}
               deployments={deployments}
               stats={stats}
               systemStatus={systemStatus}
@@ -434,6 +497,7 @@ function App() {
               onApplicationSelect={(applicationId, options) =>
                 navigate(`/applications/${encodeURIComponent(applicationId)}`, options)
               }
+              onStatusRefresh={loadSystemSummary}
             />
           ) : page === "Domains" ? (
             <DomainsPage />
@@ -599,6 +663,7 @@ function Overview({
                     )
                   }
                   title={a.status === "Stopped" ? "Start" : "Restart"}
+                  disabled={["Starting", "Restarting"].includes(a.status)}
                 >
                   <Play size={15} />
                 </button>

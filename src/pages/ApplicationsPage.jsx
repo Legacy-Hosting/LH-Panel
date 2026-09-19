@@ -38,6 +38,31 @@ function label(value) {
     .replace(/\b\w/g, (letter) => letter.toUpperCase());
 }
 
+const runtimeActionStatus = {
+  deploy: "deploying",
+  restart: "restarting",
+  start: "starting",
+  stop: "stopping",
+};
+
+function displayedProcessStatus(application, process, transition) {
+  if (!process.enabled) return "disabled";
+  if (transition) {
+    const snapshotAt = Date.parse(process.recordedAt || "");
+    const completedAt = Date.parse(transition.completedAt || "");
+    const snapshotIsCurrent =
+      transition.completedAt &&
+      Number.isFinite(snapshotAt) &&
+      Number.isFinite(completedAt) &&
+      snapshotAt >= completedAt;
+    if (!snapshotIsCurrent && Date.now() < transition.expiresAt) {
+      return transition.status;
+    }
+  }
+  if (application.status === "stopped") return "stopped";
+  return process.status || "waiting for agent";
+}
+
 export function ApplicationsPage({
   team,
   isPlatformAdmin,
@@ -46,6 +71,7 @@ export function ApplicationsPage({
   onEdit,
   onDelete,
   onApplicationSelect,
+  onStatusRefresh,
 }) {
   const feedback = useFeedback();
   const [applications, setApplications] = useState([]);
@@ -54,6 +80,7 @@ export function ApplicationsPage({
   const [logs, setLogs] = useState("");
   const [logStatus, setLogStatus] = useState("");
   const [busy, setBusy] = useState("");
+  const [runtimeTransition, setRuntimeTransition] = useState(null);
   const [error, setError] = useState("");
   const [variable, setVariable] = useState({ key: "", value: "" });
   const [persistentFilePath, setPersistentFilePath] = useState("");
@@ -107,9 +134,22 @@ export function ApplicationsPage({
     select(initialApplicationId, false);
   }, [initialApplicationId]);
 
+  useEffect(() => {
+    if (!selectedId) return undefined;
+    const timer = window.setInterval(() => {
+      if (document.visibilityState === "hidden") return;
+      Promise.allSettled([
+        loadApplications(selectedId),
+        loadDetail(selectedId),
+      ]);
+    }, 5_000);
+    return () => window.clearInterval(timer);
+  }, [selectedId, team?.id]);
+
   async function select(applicationId, updateRoute = true) {
     streamController.current?.abort();
     setPersistentFilePath("");
+    setRuntimeTransition(null);
     setSelectedId(applicationId);
     setBusy("");
     setLogs("");
@@ -123,10 +163,23 @@ export function ApplicationsPage({
     }
   }
 
-  async function followCommand(applicationId, commandId) {
+  async function refreshRuntimeState(applicationId) {
+    await Promise.allSettled([
+      loadApplications(applicationId),
+      loadDetail(applicationId),
+      Promise.resolve(onStatusRefresh?.()),
+    ]);
+  }
+
+  async function followCommand(
+    applicationId,
+    commandId,
+    { refreshStatus = false } = {},
+  ) {
     streamController.current?.abort();
     const controller = new AbortController();
     streamController.current = controller;
+    let lastSnapshot = null;
     try {
       while (!controller.signal.aborted) {
         const response = await panelApi.applicationCommand(
@@ -134,12 +187,14 @@ export function ApplicationsPage({
           commandId,
         );
         const snapshot = response.data;
+        lastSnapshot = snapshot;
         setLogs(snapshot.output || "Waiting for output from the node…");
         setLogStatus(
           snapshot.cancelRequestedAt
             ? "Cancellation requested"
             : label(snapshot.status),
         );
+        if (refreshStatus) await refreshRuntimeState(applicationId);
         if (["succeeded", "failed", "cancelled"].includes(snapshot.status))
           break;
         await new Promise((resolve, reject) => {
@@ -154,15 +209,19 @@ export function ApplicationsPage({
           controller.signal.addEventListener("abort", onAbort, { once: true });
         });
       }
-      await Promise.all([
-        loadApplications(applicationId),
-        loadDetail(applicationId),
-      ]);
+      if (refreshStatus) await refreshRuntimeState(applicationId);
+      else
+        await Promise.all([
+          loadApplications(applicationId),
+          loadDetail(applicationId),
+        ]);
+      return lastSnapshot;
     } catch (caught) {
       if (caught.name !== "AbortError")
         feedback.error(
           caught.message || "The command output stream was interrupted",
         );
+      return lastSnapshot;
     } finally {
       if (streamController.current === controller)
         streamController.current = null;
@@ -172,19 +231,37 @@ export function ApplicationsPage({
   async function action(actionName) {
     if (!detail) return;
     setBusy(actionName);
+    setRuntimeTransition({
+      status: runtimeActionStatus[actionName],
+      completedAt: null,
+      expiresAt: Number.POSITIVE_INFINITY,
+    });
     setError("");
     try {
       const response = await panelApi.applicationAction(detail.id, actionName);
       feedback.success(`${label(actionName)} queued for ${detail.name}.`);
-      if (actionName === "deploy" && response.data.commandId) {
-        setLogs("Waiting for deployment output…");
+      if (response.data.commandId) {
+        setLogs(`Waiting for ${actionName} output…`);
         setLogStatus("Queued");
-        setBusy("");
-        await followCommand(detail.id, response.data.commandId);
+        await refreshRuntimeState(detail.id);
+        const command = await followCommand(detail.id, response.data.commandId, {
+          refreshStatus: true,
+        });
+        if (command?.status === "succeeded") {
+          setRuntimeTransition({
+            status: actionName === "stop" ? "stopped" : "online",
+            completedAt: command.finishedAt || new Date().toISOString(),
+            expiresAt: Date.now() + 45_000,
+          });
+        } else {
+          setRuntimeTransition(null);
+        }
       } else {
-        await Promise.all([loadApplications(detail.id), loadDetail(detail.id)]);
+        setRuntimeTransition(null);
+        await refreshRuntimeState(detail.id);
       }
     } catch (caught) {
+      setRuntimeTransition(null);
       feedback.error(caught.message || "Could not queue application action");
     } finally {
       setBusy("");
@@ -326,6 +403,11 @@ export function ApplicationsPage({
     }
   }
 
+  const displayedDetailStatus =
+    detail && runtimeTransition && !runtimeTransition.completedAt
+      ? runtimeTransition.status
+      : detail?.status;
+
   return (
     <div className="applications-page">
       {error && <div className="data-error">{error}</div>}
@@ -384,8 +466,8 @@ export function ApplicationsPage({
                 <div>
                   <div className="detail-title-line">
                     <h2>{detail.name}</h2>
-                    <span className={`detail-status ${detail.status}`}>
-                      {label(detail.status)}
+                    <span className={`detail-status ${displayedDetailStatus}`}>
+                      {label(displayedDetailStatus)}
                     </span>
                   </div>
                   <a
@@ -454,14 +536,21 @@ export function ApplicationsPage({
                     <div><h3>Processes</h3><p>All services deploy from the same repository and release.</p></div>
                   </div>
                   <div className="application-process-list">
-                    {detail.processes.map((process) => (
-                      <div className="application-process-row" key={process.id}>
-                        <span><b>{process.name}</b><small>{process.type}{process.primary ? " · main domain" : ""}</small></span>
-                        <code>{process.executable} {process.arguments.join(" ")}</code>
-                        <span><b>{process.hostname || (process.public ? detail.hostname : "Internal only")}</b><small>{["web", "api"].includes(process.type) ? (isPlatformAdmin && process.internalPort ? `Auto port ${process.internalPort}` : "Auto-assigned port") : "No port"}</small></span>
-                        <span className={`process-runtime-status ${process.status || "missing"}`}><i></i>{process.status || "Waiting for agent"}</span>
-                      </div>
-                    ))}
+                    {detail.processes.map((process) => {
+                      const processStatus = displayedProcessStatus(
+                        detail,
+                        process,
+                        runtimeTransition,
+                      );
+                      return (
+                        <div className="application-process-row" key={process.id}>
+                          <span><b>{process.name}</b><small>{process.type}{process.primary ? " · main domain" : ""}</small></span>
+                          <code>{process.executable} {process.arguments.join(" ")}</code>
+                          <span><b>{process.hostname || (process.public ? detail.hostname : "Internal only")}</b><small>{["web", "api"].includes(process.type) ? (isPlatformAdmin && process.internalPort ? `Auto port ${process.internalPort}` : "Auto-assigned port") : "No port"}</small></span>
+                          <span className={`process-runtime-status ${processStatus}`}><i></i>{processStatus}</span>
+                        </div>
+                      );
+                    })}
                   </div>
                 </section>
               )}

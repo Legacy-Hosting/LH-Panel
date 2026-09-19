@@ -40,6 +40,12 @@ async function mockApi(page, { isPlatformAdmin = true } = {}) {
   let buildLogRequests = 0;
   let runtimeLogRequests = 0;
   let applicationDeleted = false;
+  let applicationStatus = "running";
+  let processStatus = "online";
+  let applicationUpdatedAt = "2026-09-18T10:00:00.000Z";
+  let processRecordedAt = "2026-09-18T10:00:00.000Z";
+  let lifecycleCommand = null;
+  let lifecycleCommandReads = 0;
   await page.route("http://localhost:8080/api/v1/**", async (route) => {
     const request = route.request();
     const path = new URL(request.url()).pathname;
@@ -187,6 +193,52 @@ async function mockApi(page, { isPlatformAdmin = true } = {}) {
       });
       return;
     }
+    const lifecycleAction = path.match(
+      /^\/api\/v1\/panel\/applications\/33333333-3333-4333-8333-333333333333\/actions\/(deploy|start|stop|restart)$/,
+    );
+    if (lifecycleAction && request.method() === "POST") {
+      lifecycleCommand = lifecycleAction[1];
+      lifecycleCommandReads = 0;
+      if (lifecycleCommand === "deploy") applicationStatus = "deploying";
+      await route.fulfill({
+        status: 202,
+        contentType: "application/json",
+        body: JSON.stringify({
+          data: {
+            commandId: "99999999-9999-4999-8999-999999999999",
+            status: "queued",
+          },
+        }),
+      });
+      return;
+    }
+    if (
+      path ===
+        "/api/v1/panel/applications/33333333-3333-4333-8333-333333333333/commands/99999999-9999-4999-8999-999999999999" &&
+      request.method() === "GET"
+    ) {
+      lifecycleCommandReads += 1;
+      const running = lifecycleCommandReads === 1;
+      const finishedAt = new Date().toISOString();
+      if (!running) {
+        applicationStatus = lifecycleCommand === "stop" ? "stopped" : "running";
+        processStatus = lifecycleCommand === "stop" ? "stopped" : "online";
+        applicationUpdatedAt = finishedAt;
+        processRecordedAt = finishedAt;
+      }
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          data: {
+            status: running ? "leased" : "succeeded",
+            output: running ? `${lifecycleCommand} in progress` : `${lifecycleCommand} complete`,
+            finishedAt: running ? null : finishedAt,
+          },
+        }),
+      });
+      return;
+    }
     if (
       path ===
         "/api/v1/panel/applications/33333333-3333-4333-8333-333333333333/commands/ffffffff-ffff-4fff-8fff-ffffffffffff" &&
@@ -293,11 +345,14 @@ async function mockApi(page, { isPlatformAdmin = true } = {}) {
                 hostVariable: "PORTAL_HOST",
                 portVariable: "PORTAL_PORT",
                 environmentKeys: ["DATABASE_URL"],
+                status: processStatus,
+                recordedAt: processRecordedAt,
               },
             ],
             deployments: [],
             hostnames: [{ hostname: "portal.example.com", primary: true }],
-            status: "running",
+            status: applicationStatus,
+            updatedAt: applicationUpdatedAt,
             proxyStatus: "active",
           },
         }),
@@ -320,14 +375,14 @@ async function mockApi(page, { isPlatformAdmin = true } = {}) {
         data: {
           stats: {
             applications: 1,
-            runningApplications: 1,
+            runningApplications: applicationStatus === "running" ? 1 : 0,
             nodes: 1,
             onlineNodes: 1,
             domains: 1,
             proxiedDomains: 1,
             deploymentsThisMonth: 2,
           },
-          systemStatus: "operational",
+          systemStatus: applicationStatus === "running" ? "operational" : "degraded",
         },
       },
       "/api/v1/panel/applications": {
@@ -336,7 +391,7 @@ async function mockApi(page, { isPlatformAdmin = true } = {}) {
             id: "33333333-3333-4333-8333-333333333333",
             name: "portal",
             domain: "portal.example.com",
-            status: "Running",
+            status: `${applicationStatus.charAt(0).toUpperCase()}${applicationStatus.slice(1)}`,
             cpu: "2.0%",
             mem: "128 MB",
             deploy: new Date().toISOString(),
@@ -515,6 +570,27 @@ test("runtime logs follow new lines and copy the complete output", async ({
   const clipboard = await page.evaluate(() => navigator.clipboard.readText());
   expect(clipboard).toContain("runtime line 1");
   expect(clipboard).toContain("latest runtime line");
+});
+
+test("application and system status update while lifecycle commands run", async ({
+  page,
+}) => {
+  await page.getByRole("link", { name: /portal/ }).first().click();
+  const processStatus = page.locator(".process-runtime-status");
+  const systemStatus = page.locator("header .status");
+
+  await expect(processStatus).toContainText(/online/i);
+  await expect(systemStatus).toContainText("All systems operational");
+
+  await page.getByRole("button", { name: "Stop", exact: true }).click();
+  await expect(processStatus).toContainText(/stopping/i);
+  await expect(processStatus).toContainText(/stopped/i, { timeout: 5_000 });
+  await expect(systemStatus).toContainText("Some systems need attention");
+
+  await page.getByRole("button", { name: "Start", exact: true }).click();
+  await expect(processStatus).toContainText(/starting/i);
+  await expect(processStatus).toContainText(/online/i, { timeout: 5_000 });
+  await expect(systemStatus).toContainText("All systems operational");
 });
 
 test("application settings can be edited from the overview", async ({ page }) => {

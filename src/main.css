@@ -2357,6 +2357,14 @@ footer a:hover {
   color: #f27f89;
   background: rgba(241, 94, 106, 0.07);
 }
+.detail-status.deploying,
+.detail-status.starting,
+.detail-status.stopping,
+.detail-status.restarting {
+  border-color: rgba(240, 163, 74, 0.3);
+  color: #efb46f;
+  background: rgba(240, 163, 74, 0.07);
+}
 .deployment-state.cancelled {
   border-color: rgba(240, 163, 74, 0.3);
   color: #efb46f;
@@ -2485,6 +2493,22 @@ footer a:hover {
 }
 .process-runtime-status.online i {
   background: #43d18a;
+}
+.process-runtime-status.deploying,
+.process-runtime-status.starting,
+.process-runtime-status.stopping,
+.process-runtime-status.restarting {
+  color: #efb46f;
+}
+.process-runtime-status.deploying i,
+.process-runtime-status.starting i,
+.process-runtime-status.stopping i,
+.process-runtime-status.restarting i {
+  background: #f0a34a;
+  animation: runtime-status-pulse 1.4s ease-in-out infinite;
+}
+@keyframes runtime-status-pulse {
+  50% { opacity: 0.35; }
 }
 .process-runtime-status.stopped,
 .process-runtime-status.errored {
