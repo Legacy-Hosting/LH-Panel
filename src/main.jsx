@@ -216,11 +216,47 @@ function App() {
     });
     if (!approved) return;
     try {
-      await panelApi.deleteApplication(application.id);
-      feedback.success(`${application.name} deletion queued.`);
+      const queued = await panelApi.deleteApplication(application.id);
+      setApps((current) =>
+        current.map((item) =>
+          item.id === application.id ? { ...item, status: "Deleting" } : item,
+        ),
+      );
+      feedback.warning(`${application.name} is being deleted…`);
+      let command = null;
+      for (let attempt = 0; attempt < 300; attempt += 1) {
+        const response = await panelApi.applicationCommand(
+          application.id,
+          queued.data.commandId,
+        );
+        command = response.data;
+        if (["succeeded", "failed", "cancelled"].includes(command.status))
+          break;
+        await new Promise((resolve) => window.setTimeout(resolve, 1_000));
+      }
+      if (command?.status !== "succeeded") {
+        throw new Error(
+          command?.output ||
+            (command
+              ? `Application deletion ${command.status}.`
+              : "Application deletion is still waiting for the node."),
+        );
+      }
+      setApps((current) =>
+        current.filter((item) => item.id !== application.id),
+      );
+      if (route.applicationId === application.id)
+        navigate("/applications", { replace: true });
+      if (editingApplicationId === application.id)
+        setEditingApplicationId("");
+      setApplicationRevision((current) => current + 1);
+      feedback.success(`${application.name} was deleted.`);
       await loadDashboard();
+      return true;
     } catch (error) {
-      feedback.error(error.message || "Could not queue application deletion");
+      feedback.error(error.message || "Could not delete application");
+      await loadDashboard();
+      return false;
     }
   }
   async function handleLogout() {
@@ -394,6 +430,7 @@ function App() {
               initialApplicationId={route.applicationId}
               refreshKey={applicationRevision}
               onEdit={setEditingApplicationId}
+              onDelete={deleteApplication}
               onApplicationSelect={(applicationId, options) =>
                 navigate(`/applications/${encodeURIComponent(applicationId)}`, options)
               }
@@ -575,13 +612,15 @@ function Overview({
                     <Pencil size={15} />
                   </button>
                 )}
-                <button
-                  className="row-action danger-action"
-                  onClick={() => onDelete(a)}
-                  title="Delete application"
-                >
-                  <Trash2 size={15} />
-                </button>
+                {canMutate && (
+                  <button
+                    className="row-action danger-action"
+                    onClick={() => onDelete(a)}
+                    title="Delete application"
+                  >
+                    <Trash2 size={15} />
+                  </button>
+                )}
               </div>
             </div>
           ))}

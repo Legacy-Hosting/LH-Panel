@@ -31,6 +31,7 @@ async function mockApi(page, { isPlatformAdmin = true } = {}) {
   let teams = [{ ...team }];
   let repositoryRefreshes = 0;
   let buildLogRequests = 0;
+  let applicationDeleted = false;
   await page.route("http://localhost:8080/api/v1/**", async (route) => {
     const request = route.request();
     const path = new URL(request.url()).pathname;
@@ -109,6 +110,38 @@ async function mockApi(page, { isPlatformAdmin = true } = {}) {
         status: 200,
         contentType: "application/json",
         body: JSON.stringify({ data: { updated: true } }),
+      });
+      return;
+    }
+    if (
+      path ===
+        "/api/v1/panel/applications/33333333-3333-4333-8333-333333333333" &&
+      request.method() === "DELETE"
+    ) {
+      applicationDeleted = true;
+      await route.fulfill({
+        status: 202,
+        contentType: "application/json",
+        body: JSON.stringify({
+          data: {
+            commandId: "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
+            status: "queued",
+          },
+        }),
+      });
+      return;
+    }
+    if (
+      path ===
+        "/api/v1/panel/applications/33333333-3333-4333-8333-333333333333/commands/eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee" &&
+      request.method() === "GET"
+    ) {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          data: { status: "succeeded", output: "Application removed" },
+        }),
       });
       return;
     }
@@ -193,7 +226,29 @@ async function mockApi(page, { isPlatformAdmin = true } = {}) {
               { type: "file", path: "V2/var/secrets/settings.key" },
             ],
             environment: [],
-            processes: [],
+            processes: [
+              {
+                id: "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee",
+                name: "web",
+                type: "web",
+                workingDirectory: ".",
+                executable: "pnpm",
+                arguments: ["start"],
+                primary: true,
+                public: true,
+                routes: ["/"],
+                hostname: "portal.example.com",
+                enabled: true,
+                startOrder: 0,
+                instances: 1,
+                restartDelayMs: 1000,
+                inheritEnvironment: true,
+                healthPath: "/health",
+                hostVariable: "PORTAL_HOST",
+                portVariable: "PORTAL_PORT",
+                environmentKeys: ["DATABASE_URL"],
+              },
+            ],
             deployments: [],
             hostnames: [{ hostname: "portal.example.com", primary: true }],
             status: "running",
@@ -230,7 +285,7 @@ async function mockApi(page, { isPlatformAdmin = true } = {}) {
         },
       },
       "/api/v1/panel/applications": {
-        data: [
+        data: applicationDeleted ? [] : [
           {
             id: "33333333-3333-4333-8333-333333333333",
             name: "portal",
@@ -385,9 +440,13 @@ test("application settings can be edited from the overview", async ({ page }) =>
   await expect(dialog.getByLabel("Install command")).toHaveValue(
     "pnpm install --frozen-lockfile",
   );
+  const processCard = dialog.locator(".process-card").first();
+  await expect(processCard.getByLabel("Process name")).toHaveValue("web");
+  await expect(processCard.getByText("Stored keys: DATABASE_URL")).toBeVisible();
 
   await dialog.getByLabel("Application name").fill("portal-next");
   await dialog.getByLabel("Branch").fill("production");
+  await processCard.getByLabel("Process name").fill("portal-web");
   const updateRequest = page.waitForRequest(
     (request) =>
       new URL(request.url()).pathname ===
@@ -407,6 +466,16 @@ test("application settings can be edited from the overview", async ({ page }) =>
     },
     persistentPaths: [
       { type: "file", path: "V2/var/secrets/settings.key" },
+    ],
+    processes: [
+      {
+        id: "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee",
+        name: "portal-web",
+        type: "web",
+        primary: true,
+        public: true,
+        routes: ["/"],
+      },
     ],
   });
   await expect(
@@ -490,7 +559,7 @@ test("logout sends a bodyless request without a JSON content type", async ({
   ).toBeVisible();
 });
 
-test("destructive actions use a centered confirmation and a toast", async ({
+test("application deletion completes and removes the application", async ({
   page,
 }) => {
   await page.getByTitle("Delete application").click();
@@ -509,8 +578,11 @@ test("destructive actions use a centered confirmation and a toast", async ({
   await dialog.getByRole("button", { name: "Delete application" }).click();
   const toast = page
     .getByRole("status")
-    .filter({ hasText: "portal deletion queued" });
+    .filter({ hasText: "portal was deleted" });
   await expect(toast).toBeVisible();
+  await expect(
+    page.getByText("No applications have been created yet."),
+  ).toBeVisible();
   const toastBox = await toast.boundingBox();
   const expectedBottom = viewport.width <= 720 ? 112 : 66;
   expect(toastBox).not.toBeNull();

@@ -42,6 +42,7 @@ export function ApplicationsPage({
   initialApplicationId,
   refreshKey,
   onEdit,
+  onDelete,
   onApplicationSelect,
 }) {
   const feedback = useFeedback();
@@ -183,6 +184,16 @@ export function ApplicationsPage({
       }
     } catch (caught) {
       feedback.error(caught.message || "Could not queue application action");
+    } finally {
+      setBusy("");
+    }
+  }
+
+  async function deleteCurrentApplication() {
+    if (!detail || !onDelete) return;
+    setBusy("delete");
+    try {
+      await onDelete(detail);
     } finally {
       setBusy("");
     }
@@ -403,6 +414,14 @@ export function ApplicationsPage({
                       disabled={Boolean(busy) || !detail.repository}
                     >
                       <Play size={14} /> Deploy
+                    </button>
+                    <button
+                      className="secondary danger-action"
+                      onClick={deleteCurrentApplication}
+                      disabled={Boolean(busy)}
+                      title="Delete application"
+                    >
+                      <Trash2 size={14} /> Delete
                     </button>
                   </div>
                 )}

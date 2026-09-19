@@ -1518,7 +1518,7 @@ footer a:hover {
   width: min(1040px, 100%);
 }
 .application-settings-modal {
-  width: min(760px, 100%);
+  width: min(1040px, 100%);
 }
 .persistent-file-modal {
   width: min(680px, 100%);
