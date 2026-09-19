@@ -2,12 +2,15 @@ import { useEffect, useMemo, useState } from "react";
 import {
   ChevronDown,
   ChevronUp,
+  Copy,
   GitBranch,
   LoaderCircle,
   RefreshCw,
   ScrollText,
 } from "lucide-react";
 import { panelApi } from "../api/client.js";
+import { LogViewer } from "../components/LogViewer.jsx";
+import { useFeedback } from "../components/FeedbackProvider.jsx";
 
 const finishedCommandStatuses = new Set(["succeeded", "failed", "cancelled"]);
 
@@ -44,6 +47,7 @@ function emptyLogMessage(command, loading) {
 }
 
 export function DeploymentsPage() {
+  const feedback = useFeedback();
   const [deployments, setDeployments] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -132,6 +136,16 @@ export function DeploymentsPage() {
     setExpandedId((current) => (current === deployment.id ? "" : deployment.id));
   }
 
+  async function copyBuildLogs(output) {
+    if (!output) return;
+    try {
+      await navigator.clipboard.writeText(output);
+      feedback.success("Build logs copied.");
+    } catch {
+      feedback.error("Could not copy build logs to the clipboard.");
+    }
+  }
+
   return (
     <div className="resource-page">
       <div className="resource-heading">
@@ -190,19 +204,30 @@ export function DeploymentsPage() {
                         {snapshot?.finishedAt ? ` · Finished ${displayDate(snapshot.finishedAt)}` : ""}
                       </p>
                     </div>
-                    <button
-                      className="secondary compact-button"
-                      onClick={() => setLogRefresh((current) => current + 1)}
-                      disabled={logLoading}
-                    >
-                      {logLoading ? <LoaderCircle className="spin" size={13} /> : <RefreshCw size={13} />}
-                      Refresh output
-                    </button>
+                    <div className="log-actions">
+                      <button
+                        className="secondary compact-button"
+                        onClick={() => copyBuildLogs(snapshot?.output)}
+                        disabled={!snapshot?.output}
+                      >
+                        <Copy size={13} /> Copy logs
+                      </button>
+                      <button
+                        className="secondary compact-button"
+                        onClick={() => setLogRefresh((current) => current + 1)}
+                        disabled={logLoading}
+                      >
+                        {logLoading ? <LoaderCircle className="spin" size={13} /> : <RefreshCw size={13} />}
+                        Refresh output
+                      </button>
+                    </div>
                   </div>
                   {logError && <div className="data-error">{logError}</div>}
-                  <pre className="log-viewer">
-                    {snapshot?.output || emptyLogMessage(snapshot, logLoading)}
-                  </pre>
+                  <LogViewer
+                    content={snapshot?.output || ""}
+                    emptyMessage={emptyLogMessage(snapshot, logLoading)}
+                    ariaLabel={`Build log output for ${deployment.applicationName}`}
+                  />
                 </section>
               )}
             </div>

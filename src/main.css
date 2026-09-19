@@ -2503,6 +2503,13 @@ footer a:hover {
   background: #171820;
   font-size: 9px;
 }
+.log-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  flex-wrap: wrap;
+}
 .log-viewer {
   min-height: 170px;
   max-height: 370px;
@@ -2846,6 +2853,10 @@ footer a:hover {
     flex-direction: column;
   }
   .deployment-build-log-head button {
+    width: 100%;
+  }
+  .deployment-build-log-head .log-actions,
+  .detail-section-head .log-actions {
     width: 100%;
   }
   .browser-list {

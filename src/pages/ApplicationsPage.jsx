@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import {
   Box,
+  Copy,
   ExternalLink,
   FileKey2,
   GitBranch,
@@ -19,6 +20,7 @@ import {
 import { panelApi } from "../api/client.js";
 import { useFeedback } from "../components/FeedbackProvider.jsx";
 import { PersistentFileModal } from "../components/PersistentFileModal.jsx";
+import { LogViewer } from "../components/LogViewer.jsx";
 
 function displayDate(value) {
   if (!value) return "—";
@@ -212,6 +214,16 @@ export function ApplicationsPage({
         feedback.error(caught.message || "Could not load logs");
     } finally {
       setBusy("");
+    }
+  }
+
+  async function copyRuntimeLogs() {
+    if (!logs) return;
+    try {
+      await navigator.clipboard.writeText(logs);
+      feedback.success("Runtime logs copied.");
+    } catch {
+      feedback.error("Could not copy runtime logs to the clipboard.");
     }
   }
 
@@ -487,13 +499,26 @@ export function ApplicationsPage({
               <section className="detail-section">
                 <div className="detail-section-head">
                   <div><h3>Runtime logs</h3><p>Latest PM2 output from the assigned node.</p></div>
-                  <button className="secondary" onClick={refreshLogs} disabled={busy === "logs"}>
-                    {busy === "logs" ? <LoaderCircle className="spin" size={15} /> : <ScrollText size={15} />}
-                    Refresh logs
-                  </button>
+                  <div className="log-actions">
+                    <button
+                      className="secondary"
+                      onClick={copyRuntimeLogs}
+                      disabled={!logs}
+                    >
+                      <Copy size={15} /> Copy logs
+                    </button>
+                    <button className="secondary" onClick={refreshLogs} disabled={busy === "logs"}>
+                      {busy === "logs" ? <LoaderCircle className="spin" size={15} /> : <ScrollText size={15} />}
+                      Refresh logs
+                    </button>
+                  </div>
                 </div>
                 {logStatus && <div className="log-status">Node request: {logStatus}</div>}
-                <pre className="log-viewer">{logs || "Request a log snapshot to see the latest 200 lines."}</pre>
+                <LogViewer
+                  content={logs}
+                  emptyMessage="Request a log snapshot to see the latest 200 lines."
+                  ariaLabel="Runtime log output"
+                />
               </section>
 
               <section className="detail-section">

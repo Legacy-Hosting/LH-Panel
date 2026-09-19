@@ -26,11 +26,19 @@ const nodeAgent = {
     "curl -fsSL 'https://api.legacyhosting.xyz/api/v1/agent/install.sh' | sudo bash -s -- --api-url 'https://api.legacyhosting.xyz/api/v1' --node-id '66666666-6666-4666-8666-666666666666' --token 'abcdefghijklmnopqrstuvwxyzABCDEFGH12345678'",
 };
 
+function logLines(prefix, count) {
+  return Array.from(
+    { length: count },
+    (_value, index) => `${prefix} ${index + 1}`,
+  ).join("\n");
+}
+
 async function mockApi(page, { isPlatformAdmin = true } = {}) {
   let teamName = team.name;
   let teams = [{ ...team }];
   let repositoryRefreshes = 0;
   let buildLogRequests = 0;
+  let runtimeLogRequests = 0;
   let applicationDeleted = false;
   await page.route("http://localhost:8080/api/v1/**", async (route) => {
     const request = route.request();
@@ -164,6 +172,44 @@ async function mockApi(page, { isPlatformAdmin = true } = {}) {
     }
     if (
       path ===
+        "/api/v1/panel/applications/33333333-3333-4333-8333-333333333333/logs" &&
+      request.method() === "POST"
+    ) {
+      await route.fulfill({
+        status: 202,
+        contentType: "application/json",
+        body: JSON.stringify({
+          data: {
+            commandId: "ffffffff-ffff-4fff-8fff-ffffffffffff",
+            status: "queued",
+          },
+        }),
+      });
+      return;
+    }
+    if (
+      path ===
+        "/api/v1/panel/applications/33333333-3333-4333-8333-333333333333/commands/ffffffff-ffff-4fff-8fff-ffffffffffff" &&
+      request.method() === "GET"
+    ) {
+      runtimeLogRequests += 1;
+      const running = runtimeLogRequests === 1;
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          data: {
+            status: running ? "leased" : "succeeded",
+            output: running
+              ? logLines("runtime line", 70)
+              : `${logLines("runtime line", 110)}\nlatest runtime line`,
+          },
+        }),
+      });
+      return;
+    }
+    if (
+      path ===
         "/api/v1/panel/applications/33333333-3333-4333-8333-333333333333/commands/bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb" &&
       request.method() === "GET"
     ) {
@@ -191,8 +237,8 @@ async function mockApi(page, { isPlatformAdmin = true } = {}) {
             id: "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
             status: running ? "leased" : "failed",
             output: running
-              ? "> pnpm install\nResolving packages…"
-              : "> pnpm build\nTypeScript error: Property 'name' does not exist\nELIFECYCLE Command failed with exit code 2",
+              ? `> pnpm install\n${logLines("install line", 70)}\nResolving packages…`
+              : `> pnpm build\n${logLines("build line", 110)}\nTypeScript error: Property 'name' does not exist\nELIFECYCLE Command failed with exit code 2`,
             startedAt: "2026-09-18T10:00:00.000Z",
             finishedAt: running ? null : "2026-09-18T10:00:08.000Z",
             cancelRequestedAt: null,
@@ -409,6 +455,10 @@ test("navigation keeps its page URL after a reload", async ({ page }) => {
 });
 
 test("deployment history shows captured build output", async ({ page }) => {
+  await page.context().grantPermissions(
+    ["clipboard-read", "clipboard-write"],
+    { origin: "http://127.0.0.1:4173" },
+  );
   await page.getByRole("link", { name: "Deployments" }).click();
   await expect(page).toHaveURL(/\/deployments$/);
   await page.getByRole("button", { name: "Show build logs for portal" }).click();
@@ -419,6 +469,52 @@ test("deployment history shows captured build output", async ({ page }) => {
   await expect(logs.getByText("TypeScript error: Property 'name' does not exist")).toBeVisible();
   await expect(logs.getByText("ELIFECYCLE Command failed with exit code 2")).toBeVisible();
   await expect(logs.locator(".deployment-build-log-head p")).toContainText("Failed");
+  const viewer = logs.getByLabel("Build log output for portal");
+  await expect
+    .poll(() =>
+      viewer.evaluate(
+        (element) =>
+          element.scrollHeight - element.clientHeight - element.scrollTop,
+      ),
+    )
+    .toBeLessThanOrEqual(1);
+  await logs.getByRole("button", { name: "Copy logs" }).click();
+  await expect(
+    page.getByRole("status").filter({ hasText: "Build logs copied" }),
+  ).toBeVisible();
+  expect(await page.evaluate(() => navigator.clipboard.readText())).toContain(
+    "ELIFECYCLE Command failed with exit code 2",
+  );
+});
+
+test("runtime logs follow new lines and copy the complete output", async ({
+  page,
+}) => {
+  await page.context().grantPermissions(
+    ["clipboard-read", "clipboard-write"],
+    { origin: "http://127.0.0.1:4173" },
+  );
+  await page.getByRole("link", { name: /portal/ }).first().click();
+  await page.getByRole("button", { name: "Refresh logs" }).click();
+
+  const viewer = page.getByLabel("Runtime log output");
+  await expect(viewer).toContainText("latest runtime line");
+  await expect
+    .poll(() =>
+      viewer.evaluate(
+        (element) =>
+          element.scrollHeight - element.clientHeight - element.scrollTop,
+      ),
+    )
+    .toBeLessThanOrEqual(1);
+
+  await page.getByRole("button", { name: "Copy logs" }).click();
+  await expect(
+    page.getByRole("status").filter({ hasText: "Runtime logs copied" }),
+  ).toBeVisible();
+  const clipboard = await page.evaluate(() => navigator.clipboard.readText());
+  expect(clipboard).toContain("runtime line 1");
+  expect(clipboard).toContain("latest runtime line");
 });
 
 test("application settings can be edited from the overview", async ({ page }) => {
