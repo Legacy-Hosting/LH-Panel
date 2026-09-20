@@ -3,6 +3,11 @@ const API_ROOT = (
 ).replace(/\/$/, "");
 
 let csrfToken = "";
+const SUPPORT_USER_KEY = "lh_support_user_id";
+
+function supportUserId() {
+  return window.sessionStorage.getItem(SUPPORT_USER_KEY) || "";
+}
 
 const fieldLabels = {
   name: "Name",
@@ -48,6 +53,7 @@ async function csrf() {
 async function request(path, options = {}) {
   const { headers: optionHeaders, ...requestOptions } = options;
   const teamId = window.localStorage.getItem("lh_active_team");
+  const supportId = supportUserId();
   const method = (requestOptions.method || "GET").toUpperCase();
   const hasBody = requestOptions.body !== undefined && requestOptions.body !== null;
   const unauthenticatedAuth = [
@@ -66,6 +72,7 @@ async function request(path, options = {}) {
     headers: {
       ...(hasBody ? { "Content-Type": "application/json" } : {}),
       ...(teamId ? { "X-Team-ID": teamId } : {}),
+      ...(supportId ? { "X-Support-User-ID": supportId } : {}),
       ...(requestCsrfToken ? { "X-CSRF-Token": requestCsrfToken } : {}),
       ...optionHeaders,
     },
@@ -87,9 +94,13 @@ async function request(path, options = {}) {
 
 async function stream(path, onEvent, signal) {
   const teamId = window.localStorage.getItem("lh_active_team");
+  const supportId = supportUserId();
   const response = await fetch(`${API_ROOT}${path}`, {
     credentials: "include",
-    headers: teamId ? { "X-Team-ID": teamId } : {},
+    headers: {
+      ...(teamId ? { "X-Team-ID": teamId } : {}),
+      ...(supportId ? { "X-Support-User-ID": supportId } : {}),
+    },
     signal,
   });
   if (!response.ok || !response.body)
@@ -118,6 +129,9 @@ async function stream(path, onEvent, signal) {
 
 export const panelApi = {
   selectTeam: (teamId) => window.localStorage.setItem("lh_active_team", teamId),
+  selectSupportUser: (userId) =>
+    window.sessionStorage.setItem(SUPPORT_USER_KEY, userId),
+  clearSupportUser: () => window.sessionStorage.removeItem(SUPPORT_USER_KEY),
   registrationStatus: () => request("/auth/registration"),
   me: () => request("/auth/me"),
   registrationOptions: (body) =>
@@ -151,6 +165,7 @@ export const panelApi = {
       method: "PUT",
       body: JSON.stringify(body),
     }),
+  adminUsers: () => request("/auth/admin/users"),
   teams: () => request("/teams"),
   createTeam: (body) =>
     request("/teams", {
@@ -175,6 +190,8 @@ export const panelApi = {
       body: JSON.stringify(body),
     }),
   cloudflareConnections: () => request("/integrations/cloudflare"),
+  disconnectCloudflare: (integrationId) =>
+    request(`/integrations/cloudflare/${integrationId}`, { method: "DELETE" }),
   cloudflareZones: () => request("/integrations/cloudflare/zones"),
   cloudflareConnect: (returnPath = "/settings/integrations") =>
     request("/integrations/cloudflare/connect", {
@@ -182,6 +199,8 @@ export const panelApi = {
       body: JSON.stringify({ returnPath }),
     }),
   githubConnections: () => request("/integrations/github"),
+  disconnectGithub: (integrationId) =>
+    request(`/integrations/github/${integrationId}`, { method: "DELETE" }),
   githubRepositories: () => request("/integrations/github/repositories"),
   refreshGithubRepositories: () =>
     request("/integrations/github/repositories/refresh", { method: "POST" }),

@@ -4,6 +4,7 @@ import {
   ExternalLink,
   GitBranch,
   LoaderCircle,
+  Unplug,
 } from "lucide-react";
 import { panelApi } from "../api/client.js";
 import { useFeedback } from "../components/FeedbackProvider.jsx";
@@ -87,6 +88,40 @@ export function SettingsPage() {
     }
   }
 
+  async function disconnect(provider, connection) {
+    const approved = await feedback.confirm({
+      title: `Disconnect ${connection.displayName}?`,
+      message:
+        provider === "github"
+          ? "Legacy Hosting will lose access to these repositories. Existing applications remain, but future deployments may fail until GitHub is connected again."
+          : "Legacy Hosting will lose access to these zones. Existing DNS records remain, but DNS and certificate changes require a new Cloudflare connection.",
+      confirmLabel: "Disconnect",
+      tone: "danger",
+    });
+    if (!approved) return;
+    const busyKey = `${provider}-${connection.id}`;
+    setBusy(busyKey);
+    setError("");
+    try {
+      if (provider === "github") {
+        await panelApi.disconnectGithub(connection.id);
+        setGithub((current) =>
+          current.filter((item) => item.id !== connection.id),
+        );
+      } else {
+        await panelApi.disconnectCloudflare(connection.id);
+        setCloudflare((current) =>
+          current.filter((item) => item.id !== connection.id),
+        );
+      }
+      feedback.success(`${connection.displayName} was disconnected.`);
+    } catch (caught) {
+      feedback.error(caught.message || `Could not disconnect ${provider}`);
+    } finally {
+      setBusy("");
+    }
+  }
+
   return (
     <div className="settings-page">
       {error && <div className="data-error">{error}</div>}
@@ -116,7 +151,22 @@ export function SettingsPage() {
                   <b>{connection.displayName}</b>
                   <span>{connection.zones} available zones</span>
                 </div>
-                <span className="connected-pill">Connected</span>
+                <div className="connection-actions">
+                  <span className="connected-pill">Connected</span>
+                  <button
+                    className="row-action danger-action"
+                    onClick={() => disconnect("cloudflare", connection)}
+                    disabled={busy === `cloudflare-${connection.id}`}
+                    aria-label={`Disconnect Cloudflare ${connection.displayName}`}
+                    title="Disconnect Cloudflare"
+                  >
+                    {busy === `cloudflare-${connection.id}` ? (
+                      <LoaderCircle className="spin" size={14} />
+                    ) : (
+                      <Unplug size={14} />
+                    )}
+                  </button>
+                </div>
               </div>
             ))}
             {cloudflare.length === 0 && (
@@ -158,9 +208,27 @@ export function SettingsPage() {
                   <b>{connection.displayName}</b>
                   <span>{connection.repositories} available repositories</span>
                 </div>
-                <span className="connected-pill">Connected</span>
+                <div className="connection-actions">
+                  <span className="connected-pill">Connected</span>
+                  <button
+                    className="row-action danger-action"
+                    onClick={() => disconnect("github", connection)}
+                    disabled={busy === `github-${connection.id}`}
+                    aria-label={`Disconnect GitHub ${connection.displayName}`}
+                    title="Disconnect GitHub"
+                  >
+                    {busy === `github-${connection.id}` ? (
+                      <LoaderCircle className="spin" size={14} />
+                    ) : (
+                      <Unplug size={14} />
+                    )}
+                  </button>
+                </div>
               </div>
             ))}
+            {github.length === 0 && (
+              <p className="settings-empty">No GitHub account connected.</p>
+            )}
           </div>
           <button
             className="secondary settings-action"

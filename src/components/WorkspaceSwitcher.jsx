@@ -18,6 +18,7 @@ export function WorkspaceSwitcher({
   onSelect,
   onCreated,
   compact = false,
+  canCreate = true,
 }) {
   const feedback = useFeedback();
   const rootRef = useRef(null);
@@ -119,16 +120,18 @@ export function WorkspaceSwitcher({
                 </button>
               ))}
             </div>
-            <button
-              type="button"
-              className="workspace-create-action"
-              onClick={() => {
-                setOpen(false);
-                setShowCreate(true);
-              }}
-            >
-              <Plus size={15} /> Create team
-            </button>
+            {canCreate && (
+              <button
+                type="button"
+                className="workspace-create-action"
+                onClick={() => {
+                  setOpen(false);
+                  setShowCreate(true);
+                }}
+              >
+                <Plus size={15} /> Create team
+              </button>
+            )}
           </div>
         )}
       </div>

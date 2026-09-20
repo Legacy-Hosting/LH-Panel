@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useState } from "react";
 import { createRoot } from "react-dom/client";
 import {
   Activity,
+  ArrowLeft,
   Box,
   ChevronDown,
   CircleHelp,
@@ -36,6 +37,7 @@ import { NotificationMenu } from "./components/NotificationMenu.jsx";
 import { WorkspaceSwitcher } from "./components/WorkspaceSwitcher.jsx";
 import { MonitoringPage } from "./pages/MonitoringPage.jsx";
 import { AdminSettingsPage } from "./pages/AdminSettingsPage.jsx";
+import { AdminUsersPage } from "./pages/AdminUsersPage.jsx";
 import { PANEL_VERSION } from "./version.js";
 import { greetingForHour } from "./greeting.js";
 import {
@@ -63,6 +65,18 @@ const emptyStats = {
   proxiedDomains: 0,
   deploymentsThisMonth: 0,
 };
+const SUPPORT_VIEW_KEY = "lh_support_view";
+
+function storedSupportView() {
+  try {
+    const value = JSON.parse(
+      window.sessionStorage.getItem(SUPPORT_VIEW_KEY) || "null",
+    );
+    return value?.id && Array.isArray(value.teams) ? value : null;
+  } catch {
+    return null;
+  }
+}
 
 function relativeTime(value) {
   if (!value || value === "Not deployed") return "Not deployed";
@@ -87,7 +101,7 @@ function routeFromPathname(pathname = window.location.pathname) {
   }
 
   const adminMatch = normalized.match(
-    /^\/admin(?:\/(nodes|monitoring|settings))?$/,
+    /^\/admin(?:\/(nodes|monitoring|users|settings))?$/,
   );
   if (adminMatch) {
     return { page: "Admin", adminSection: adminMatch[1] || "nodes" };
@@ -113,15 +127,19 @@ function isPlainNavigation(event) {
 function App() {
   const { user, logout, refresh } = useAuth();
   const feedback = useFeedback();
+  const [supportView, setSupportView] = useState(storedSupportView);
   const [localHour, setLocalHour] = useState(() => new Date().getHours());
   const [activeTeamId, setActiveTeamId] = useState(
     () => window.localStorage.getItem("lh_active_team") || "",
   );
+  const effectiveUser = supportView || user;
+  const effectiveTeams = effectiveUser.teams || [];
   const selectedTeam =
-    user.teams?.find((team) => team.id === activeTeamId) || user.teams?.[0];
+    effectiveTeams.find((team) => team.id === activeTeamId) || effectiveTeams[0];
   const [route, setRoute] = useState(routeFromPathname);
   const page = route.page;
-  const visibleNav = user.isPlatformAdmin ? [...nav, adminNav] : nav;
+  const effectiveIsPlatformAdmin = user.isPlatformAdmin && !supportView;
+  const visibleNav = effectiveIsPlatformAdmin ? [...nav, adminNav] : nav;
   const [query, setQuery] = useState("");
   const [apps, setApps] = useState([]);
   const [deployments, setDeployments] = useState([]);
@@ -162,10 +180,16 @@ function App() {
     };
   }, []);
   useEffect(() => {
-    if (page === "Admin" && !user.isPlatformAdmin) {
+    if (page === "Admin" && !effectiveIsPlatformAdmin) {
       navigate("/", { replace: true });
     }
-  }, [navigate, page, user.isPlatformAdmin]);
+  }, [effectiveIsPlatformAdmin, navigate, page]);
+  useEffect(() => {
+    if (user.isPlatformAdmin) return;
+    panelApi.clearSupportUser();
+    window.sessionStorage.removeItem(SUPPORT_VIEW_KEY);
+    setSupportView(null);
+  }, [user.isPlatformAdmin]);
   useEffect(() => {
     if (selectedTeam?.id && activeTeamId !== selectedTeam.id) {
       panelApi.selectTeam(selectedTeam.id);
@@ -320,6 +344,8 @@ function App() {
   async function handleLogout() {
     try {
       await logout();
+      panelApi.clearSupportUser();
+      window.sessionStorage.removeItem(SUPPORT_VIEW_KEY);
       feedback.success("You have been signed out.");
     } catch (error) {
       feedback.error(error.message || "Could not sign out");
@@ -343,6 +369,47 @@ function App() {
     await refresh();
     handleTeamSelect(team);
   }
+  function enterSupportView(customer, team) {
+    if (!team) return;
+    const nextSupportView = {
+      ...customer,
+      returnTeamId: selectedTeam?.id || user.teams?.[0]?.id || "",
+    };
+    panelApi.selectSupportUser(customer.id);
+    panelApi.selectTeam(team.id);
+    window.sessionStorage.setItem(
+      SUPPORT_VIEW_KEY,
+      JSON.stringify(nextSupportView),
+    );
+    setSupportView(nextSupportView);
+    setActiveTeamId(team.id);
+    setApps([]);
+    setDeployments([]);
+    setStats(emptyStats);
+    setDataError("");
+    setShowCreateApplication(false);
+    setEditingApplicationId("");
+    navigate("/", { replace: true });
+    feedback.warning(`Support view opened for ${customer.displayName}.`);
+  }
+  function exitSupportView() {
+    const returnTeam =
+      user.teams?.find((team) => team.id === supportView?.returnTeamId) ||
+      user.teams?.[0];
+    panelApi.clearSupportUser();
+    window.sessionStorage.removeItem(SUPPORT_VIEW_KEY);
+    if (returnTeam) panelApi.selectTeam(returnTeam.id);
+    setSupportView(null);
+    setActiveTeamId(returnTeam?.id || "");
+    setApps([]);
+    setDeployments([]);
+    setStats(emptyStats);
+    setDataError("");
+    setShowCreateApplication(false);
+    setEditingApplicationId("");
+    navigate("/admin/users", { replace: true });
+    feedback.success("Returned to your administrator account.");
+  }
   return (
     <div className="shell">
       <aside>
@@ -355,10 +422,11 @@ function App() {
         </div>
         <div className="desktop-workspace-switcher">
           <WorkspaceSwitcher
-            teams={user.teams}
+            teams={effectiveTeams}
             selectedTeam={selectedTeam}
             onSelect={handleTeamSelect}
             onCreated={handleTeamCreated}
+            canCreate={!supportView}
           />
         </div>
         <nav>
@@ -373,6 +441,14 @@ function App() {
               {label}
             </a>
           ))}
+          <a
+            className={`mobile-nav-secondary ${page === "Settings" ? "active" : ""}`}
+            href="/settings"
+            onClick={(event) => followLink(event, "/settings")}
+          >
+            <Settings size={17} />
+            Settings
+          </a>
         </nav>
         <div className="aside-bottom">
           <a
@@ -393,7 +469,7 @@ function App() {
           </a>
           <div className="profile">
             <div className="avatar">
-              {user.displayName
+              {effectiveUser.displayName
                 .split(/\s+/)
                 .map((part) => part[0])
                 .join("")
@@ -401,8 +477,14 @@ function App() {
                 .toUpperCase()}
             </div>
             <div>
-              <b>{user.displayName}</b>
-              <small>{user.isPlatformAdmin ? "Administrator" : "Member"}</small>
+              <b>{effectiveUser.displayName}</b>
+              <small>
+                {supportView
+                  ? "Customer support view"
+                  : user.isPlatformAdmin
+                    ? "Administrator"
+                    : "Member"}
+              </small>
             </div>
             <button
               className="profile-action"
@@ -422,20 +504,31 @@ function App() {
             </div>
             <h1>
               {page === "Overview"
-                ? `${greetingForHour(localHour)}, ${user.displayName.split(/\s+/)[0]}`
+                ? `${greetingForHour(localHour)}, ${effectiveUser.displayName.split(/\s+/)[0]}`
                 : page}
             </h1>
           </div>
           <div className="mobile-workspace-switcher">
             <WorkspaceSwitcher
               compact
-              teams={user.teams}
+              teams={effectiveTeams}
               selectedTeam={selectedTeam}
               onSelect={handleTeamSelect}
               onCreated={handleTeamCreated}
+              canCreate={!supportView}
             />
           </div>
           <div className="header-actions">
+            {supportView && (
+              <button
+                className="support-exit"
+                onClick={exitSupportView}
+                title="Return to administrator account"
+              >
+                <ArrowLeft size={15} />
+                <span>Exit {supportView.displayName}</span>
+              </button>
+            )}
             <button className="icon-btn">
               <Search size={18} />
             </button>
@@ -489,7 +582,7 @@ function App() {
           ) : page === "Applications" ? (
             <ApplicationsPage
               team={selectedTeam}
-              isPlatformAdmin={user.isPlatformAdmin}
+              isPlatformAdmin={effectiveIsPlatformAdmin}
               initialApplicationId={route.applicationId}
               refreshKey={applicationRevision}
               onEdit={setEditingApplicationId}
@@ -507,11 +600,12 @@ function App() {
             <DeploymentsPage />
           ) : page === "Monitoring" ? (
             <MonitoringPage team={selectedTeam} />
-          ) : page === "Admin" && user.isPlatformAdmin ? (
+          ) : page === "Admin" && effectiveIsPlatformAdmin ? (
             <AdminPage
               section={route.adminSection}
               team={selectedTeam}
               onNavigate={navigate}
+              onSupport={enterSupportView}
             />
           ) : (
             <Placeholder page={page} />
@@ -726,7 +820,7 @@ function Overview({
   );
 }
 
-function AdminPage({ section, team, onNavigate }) {
+function AdminPage({ section, team, onNavigate, onSupport }) {
   const tabs = [
     { id: "nodes", label: "Nodes", path: "/admin/nodes" },
     {
@@ -734,6 +828,7 @@ function AdminPage({ section, team, onNavigate }) {
       label: "Infrastructure monitoring",
       path: "/admin/monitoring",
     },
+    { id: "users", label: "Users", path: "/admin/users" },
     { id: "settings", label: "Platform access", path: "/admin/settings" },
   ];
   return (
@@ -756,6 +851,8 @@ function AdminPage({ section, team, onNavigate }) {
       </div>
       {section === "monitoring" ? (
         <MonitoringPage team={team} infrastructure />
+      ) : section === "users" ? (
+        <AdminUsersPage onSupport={onSupport} />
       ) : section === "settings" ? (
         <AdminSettingsPage />
       ) : (

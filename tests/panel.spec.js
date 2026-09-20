@@ -12,6 +12,21 @@ const createdTeam = {
   slug: "legacy-hosting-apps-1234abcd",
   role: "owner",
 };
+const customerTeam = {
+  id: "12121212-1212-4212-8212-121212121212",
+  name: "Customer Workspace",
+  slug: "customer-workspace",
+  role: "owner",
+};
+const customerUser = {
+  id: "13131313-1313-4313-8313-131313131313",
+  email: "customer@example.com",
+  displayName: "Customer User",
+  status: "active",
+  isPlatformAdmin: false,
+  createdAt: "2026-09-19T10:00:00.000Z",
+  teams: [customerTeam],
+};
 const nodeAgent = {
   nodeId: "66666666-6666-4666-8666-666666666666",
   token: "abcdefghijklmnopqrstuvwxyzABCDEFGH12345678",
@@ -46,6 +61,8 @@ async function mockApi(page, { isPlatformAdmin = true } = {}) {
   let processRecordedAt = "2026-09-18T10:00:00.000Z";
   let lifecycleCommand = null;
   let lifecycleCommandReads = 0;
+  let cloudflareConnected = true;
+  let githubConnected = true;
   await page.route("http://localhost:8080/api/v1/**", async (route) => {
     const request = route.request();
     const path = new URL(request.url()).pathname;
@@ -83,6 +100,22 @@ async function mockApi(page, { isPlatformAdmin = true } = {}) {
       path === "/api/v1/integrations/github/repositories/refresh" &&
       request.method() === "POST"
     ) {
+      if (request.headers()["x-support-user-id"] === customerUser.id) {
+        await route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify({
+            data: [
+              {
+                id: "14141414-1414-4414-8414-141414141414",
+                fullName: "CustomerOrg/Website",
+                metadata: { defaultBranch: "main", private: true },
+              },
+            ],
+          }),
+        });
+        return;
+      }
       repositoryRefreshes += 1;
       const repositories = [
         {
@@ -102,6 +135,24 @@ async function mockApi(page, { isPlatformAdmin = true } = {}) {
         contentType: "application/json",
         body: JSON.stringify({ data: repositories }),
       });
+      return;
+    }
+    if (
+      path ===
+        "/api/v1/integrations/cloudflare/15151515-1515-4515-8515-151515151515" &&
+      request.method() === "DELETE"
+    ) {
+      cloudflareConnected = false;
+      await route.fulfill({ status: 204, body: "" });
+      return;
+    }
+    if (
+      path ===
+        "/api/v1/integrations/github/16161616-1616-4616-8616-161616161616" &&
+      request.method() === "DELETE"
+    ) {
+      githubConnected = false;
+      await route.fulfill({ status: 204, body: "" });
       return;
     }
     if (
@@ -371,6 +422,20 @@ async function mockApi(page, { isPlatformAdmin = true } = {}) {
           ),
         },
       },
+      "/api/v1/auth/admin/users": {
+        data: [
+          customerUser,
+          {
+            id: "22222222-2222-4222-8222-222222222222",
+            email: "dj@example.com",
+            displayName: "DJ Ang",
+            status: "active",
+            isPlatformAdmin: true,
+            createdAt: "2026-09-18T10:00:00.000Z",
+            teams: [team],
+          },
+        ],
+      },
       "/api/v1/panel/overview": {
         data: {
           stats: {
@@ -436,10 +501,46 @@ async function mockApi(page, { isPlatformAdmin = true } = {}) {
         ],
       },
       "/api/v1/integrations/cloudflare/zones": {
-        data: [
-          { id: "99999999-9999-4999-8999-999999999999", name: "legacyh.dev" },
-          { id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", name: "tg.no" },
-        ],
+        data:
+          request.headers()["x-support-user-id"] === customerUser.id
+            ? [
+                {
+                  id: "17171717-1717-4717-8717-171717171717",
+                  name: "customer.example",
+                },
+              ]
+            : [
+                {
+                  id: "99999999-9999-4999-8999-999999999999",
+                  name: "legacyh.dev",
+                },
+                {
+                  id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+                  name: "tg.no",
+                },
+              ],
+      },
+      "/api/v1/integrations/cloudflare": {
+        data: cloudflareConnected
+          ? [
+              {
+                id: "15151515-1515-4515-8515-151515151515",
+                displayName: "Cloudflare Account",
+                zones: 2,
+              },
+            ]
+          : [],
+      },
+      "/api/v1/integrations/github": {
+        data: githubConnected
+          ? [
+              {
+                id: "16161616-1616-4616-8616-161616161616",
+                displayName: "NextarchStudio",
+                repositories: 12,
+              },
+            ]
+          : [],
       },
       "/api/v1/panel/deployments": {
         data: [
@@ -813,6 +914,115 @@ test("users can create and switch between teams", async ({ page }) => {
     "aria-label",
     `Switch team. Current team: ${team.name}`,
   );
+});
+
+test("workspace connections can be disconnected from settings", async ({
+  page,
+}) => {
+  await page.getByRole("link", { name: "Settings" }).click();
+  await expect(page.getByText("Cloudflare Account")).toBeVisible();
+  await expect(page.getByText("NextarchStudio", { exact: true })).toBeVisible();
+
+  const cloudflareRequest = page.waitForRequest(
+    (request) =>
+      new URL(request.url()).pathname ===
+        "/api/v1/integrations/cloudflare/15151515-1515-4515-8515-151515151515" &&
+      request.method() === "DELETE",
+  );
+  await page
+    .getByRole("button", { name: "Disconnect Cloudflare Cloudflare Account" })
+    .click();
+  await page.getByRole("alertdialog").getByRole("button", { name: "Disconnect" }).click();
+  await cloudflareRequest;
+  await expect(page.getByText("No Cloudflare account connected.")).toBeVisible();
+
+  const githubRequest = page.waitForRequest(
+    (request) =>
+      new URL(request.url()).pathname ===
+        "/api/v1/integrations/github/16161616-1616-4616-8616-161616161616" &&
+      request.method() === "DELETE",
+  );
+  await page
+    .getByRole("button", { name: "Disconnect GitHub NextarchStudio" })
+    .click();
+  await page.getByRole("alertdialog").getByRole("button", { name: "Disconnect" }).click();
+  await githubRequest;
+  await expect(page.getByText("No GitHub account connected.")).toBeVisible();
+});
+
+test("administrators can support a customer and create an application in their workspace", async ({
+  page,
+}) => {
+  await page.getByRole("link", { name: "Admin", exact: true }).click();
+  await page.getByRole("link", { name: "Users", exact: true }).click();
+  await expect(page.getByText(customerUser.email)).toBeVisible();
+
+  const supportOverview = page.waitForRequest(
+    (request) =>
+      new URL(request.url()).pathname === "/api/v1/panel/overview" &&
+      request.headers()["x-support-user-id"] === customerUser.id &&
+      request.headers()["x-team-id"] === customerTeam.id,
+  );
+  await page
+    .getByRole("button", { name: "View customer panel", exact: true })
+    .first()
+    .click();
+  await supportOverview;
+
+  await expect(page).toHaveURL(/\/$/);
+  await expect(page.getByText(/Good (morning|afternoon|evening), Customer/)).toBeVisible();
+  await expect(page.getByRole("link", { name: "Admin", exact: true })).toHaveCount(0);
+  await expect(
+    page.locator('.workspace[aria-label^="Switch team"]:visible'),
+  ).toHaveAttribute(
+    "aria-label",
+    `Switch team. Current team: ${customerTeam.name}`,
+  );
+
+  const customerRepositories = page.waitForRequest(
+    (request) =>
+      new URL(request.url()).pathname ===
+        "/api/v1/integrations/github/repositories/refresh" &&
+      request.headers()["x-support-user-id"] === customerUser.id &&
+      request.headers()["x-team-id"] === customerTeam.id,
+  );
+  await page.getByRole("button", { name: "New application" }).click();
+  await customerRepositories;
+  const dialog = page.getByRole("dialog", { name: "New application" });
+  await expect(
+    dialog.getByLabel("GitHub repository").locator('option[value="CustomerOrg/Website"]'),
+  ).toHaveCount(1);
+  await expect(
+    dialog.locator(".form-grid").first().locator("select").nth(1),
+  ).toHaveValue("customer.example");
+
+  await dialog.getByLabel("Application name").fill("customer-site");
+  await dialog.getByLabel("GitHub repository").selectOption("CustomerOrg/Website");
+  const createRequest = page.waitForRequest(
+    (request) =>
+      new URL(request.url()).pathname === "/api/v1/panel/applications" &&
+      request.method() === "POST",
+  );
+  await dialog.getByRole("button", { name: "Create application" }).click();
+  const created = await createRequest;
+  expect(created.headers()["x-support-user-id"]).toBe(customerUser.id);
+  expect(created.headers()["x-team-id"]).toBe(customerTeam.id);
+  expect(created.postDataJSON()).toMatchObject({
+    name: "customer-site",
+    rootDomain: "customer.example",
+    domain: "customer.example",
+    repository: "CustomerOrg/Website",
+  });
+
+  const adminUsers = page.waitForRequest(
+    (request) =>
+      new URL(request.url()).pathname === "/api/v1/auth/admin/users" &&
+      !request.headers()["x-support-user-id"],
+  );
+  await page.getByTitle("Return to administrator account").click();
+  await adminUsers;
+  await expect(page).toHaveURL(/\/admin\/users$/);
+  await expect(page.getByRole("link", { name: "Admin", exact: true })).toBeVisible();
 });
 
 test("nodes accept public and private FQDN, IPv4, and IPv6", async ({
