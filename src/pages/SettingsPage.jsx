@@ -13,6 +13,10 @@ export function SettingsPage() {
   const feedback = useFeedback();
   const [cloudflare, setCloudflare] = useState([]);
   const [github, setGithub] = useState([]);
+  const [githubUser, setGithubUser] = useState(null);
+  const [githubOrganization, setGithubOrganization] = useState(
+    "GitHub organization",
+  );
   const [busy, setBusy] = useState("");
   const [error, setError] = useState("");
   const integrationResult = new URLSearchParams(window.location.search).get(
@@ -22,11 +26,43 @@ export function SettingsPage() {
   useEffect(() => {
     if (!integrationResult) return;
     const results = {
-      cloudflare_connected: ["success", "Cloudflare was connected successfully."],
+      cloudflare_connected: [
+        "success",
+        "Cloudflare was connected successfully.",
+      ],
       cloudflare_failed: ["error", "Cloudflare could not be connected."],
       cloudflare_denied: ["warning", "Cloudflare access was not approved."],
       github_connected: ["success", "GitHub was connected successfully."],
       github_failed: ["error", "GitHub could not be connected."],
+      github_denied: ["warning", "GitHub authorization was cancelled."],
+      github_organization_membership_required: [
+        "error",
+        "This GitHub account is not an active member of NextarchStudio.",
+      ],
+      github_sso_required: [
+        "error",
+        "Authorize Legacy Hosting Deployments for your organization SSO, then connect GitHub again.",
+      ],
+      github_no_repository_access: [
+        "error",
+        "This GitHub account has no repositories available through the organization installation.",
+      ],
+      github_installation_missing: [
+        "error",
+        "Legacy Hosting Deployments is not installed on NextarchStudio.",
+      ],
+      github_installation_unavailable: [
+        "error",
+        "The NextarchStudio GitHub App installation is unavailable.",
+      ],
+      github_account_already_connected: [
+        "error",
+        "This GitHub account is already linked to another Legacy Hosting account.",
+      ],
+      github_reauthorization_required: [
+        "warning",
+        "Your GitHub authorization expired. Connect GitHub again.",
+      ],
     };
     const result = results[integrationResult];
     if (result) feedback.notify(result[0], result[1]);
@@ -52,6 +88,10 @@ export function SettingsPage() {
         if (!active) return;
         setCloudflare(connections.data);
         setGithub(githubConnections.data);
+        setGithubUser(githubConnections.meta?.userConnection || null);
+        setGithubOrganization(
+          githubConnections.meta?.organization || "GitHub organization",
+        );
       } catch (caught) {
         if (active) setError(caught.message || "Could not load settings");
       }
@@ -81,9 +121,9 @@ export function SettingsPage() {
     setError("");
     try {
       const response = await panelApi.githubConnect("/settings/integrations");
-      window.location.assign(response.data.installationUrl);
+      window.location.assign(response.data.authorizationUrl);
     } catch (caught) {
-      feedback.error(caught.message || "Could not start GitHub App installation");
+      feedback.error(caught.message || "Could not start GitHub authorization");
       setBusy("");
     }
   }
@@ -93,7 +133,7 @@ export function SettingsPage() {
       title: `Disconnect ${connection.displayName}?`,
       message:
         provider === "github"
-          ? "Legacy Hosting will lose access to these repositories. Existing applications remain, but future deployments may fail until GitHub is connected again."
+          ? "Your personal GitHub authorization and repository list will be removed. Existing applications and the organization App installation remain available for deploys."
           : "Legacy Hosting will lose access to these zones. Existing DNS records remain, but DNS and certificate changes require a new Cloudflare connection.",
       confirmLabel: "Disconnect",
       tone: "danger",
@@ -104,10 +144,8 @@ export function SettingsPage() {
     setError("");
     try {
       if (provider === "github") {
-        await panelApi.disconnectGithub(connection.id);
-        setGithub((current) =>
-          current.filter((item) => item.id !== connection.id),
-        );
+        await panelApi.disconnectGithub();
+        setGithubUser(null);
       } else {
         await panelApi.disconnectCloudflare(connection.id);
         setCloudflare((current) =>
@@ -198,26 +236,58 @@ export function SettingsPage() {
             </div>
           </div>
           <p className="settings-copy">
-            A GitHub App will provide repository-level access, private cloning
-            and signed push webhooks without storing a personal access token.
+            The organization installs the GitHub App once. Your GitHub account
+            is authorized separately, so you only see repositories your user can
+            access through teams or direct permission.
           </p>
           <div className="connection-list">
             {github.map((connection) => (
               <div className="connection-row" key={connection.id}>
                 <div>
                   <b>{connection.displayName}</b>
-                  <span>{connection.repositories} available repositories</span>
+                  <span>
+                    Organization App installation · ID{" "}
+                    {connection.installationId}
+                  </span>
                 </div>
                 <div className="connection-actions">
-                  <span className="connected-pill">Connected</span>
+                  <span className="connected-pill">App installed</span>
+                </div>
+              </div>
+            ))}
+            {github.length === 0 && (
+              <div className="connection-row">
+                <div>
+                  <b>{githubOrganization}</b>
+                  <span>Organization App installation managed by an owner</span>
+                </div>
+                <span className="connected-pill">Organization managed</span>
+              </div>
+            )}
+            {githubUser ? (
+              <div className="connection-row">
+                <div>
+                  <b>@{githubUser.githubLogin}</b>
+                  <span>
+                    Your GitHub account · {githubUser.repositories} accessible
+                    repositories
+                  </span>
+                </div>
+                <div className="connection-actions">
+                  <span className="connected-pill">Authorized</span>
                   <button
                     className="row-action danger-action"
-                    onClick={() => disconnect("github", connection)}
-                    disabled={busy === `github-${connection.id}`}
-                    aria-label={`Disconnect GitHub ${connection.displayName}`}
-                    title="Disconnect GitHub"
+                    onClick={() =>
+                      disconnect("github", {
+                        id: githubUser.id,
+                        displayName: `@${githubUser.githubLogin}`,
+                      })
+                    }
+                    disabled={busy === `github-${githubUser.id}`}
+                    aria-label={`Disconnect GitHub account ${githubUser.githubLogin}`}
+                    title="Disconnect GitHub account"
                   >
-                    {busy === `github-${connection.id}` ? (
+                    {busy === `github-${githubUser.id}` ? (
                       <LoaderCircle className="spin" size={14} />
                     ) : (
                       <Unplug size={14} />
@@ -225,9 +295,8 @@ export function SettingsPage() {
                   </button>
                 </div>
               </div>
-            ))}
-            {github.length === 0 && (
-              <p className="settings-empty">No GitHub account connected.</p>
+            ) : (
+              <p className="settings-empty">No GitHub user authorized.</p>
             )}
           </div>
           <button
@@ -240,11 +309,10 @@ export function SettingsPage() {
             ) : (
               <GitBranch size={16} />
             )}
-            Install GitHub App
+            {githubUser ? "Reconnect GitHub account" : "Connect GitHub account"}
           </button>
         </section>
       </div>
-
     </div>
   );
 }

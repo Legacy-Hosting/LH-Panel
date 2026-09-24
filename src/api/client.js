@@ -199,8 +199,8 @@ export const panelApi = {
       body: JSON.stringify({ returnPath }),
     }),
   githubConnections: () => request("/integrations/github"),
-  disconnectGithub: (integrationId) =>
-    request(`/integrations/github/${integrationId}`, { method: "DELETE" }),
+  disconnectGithub: () =>
+    request("/integrations/github/user", { method: "DELETE" }),
   githubRepositories: () => request("/integrations/github/repositories"),
   refreshGithubRepositories: () =>
     request("/integrations/github/repositories/refresh", { method: "POST" }),

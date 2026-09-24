@@ -62,7 +62,7 @@ async function mockApi(page, { isPlatformAdmin = true } = {}) {
   let lifecycleCommand = null;
   let lifecycleCommandReads = 0;
   let cloudflareConnected = true;
-  let githubConnected = true;
+  let githubUserConnected = true;
   await page.route("http://localhost:8080/api/v1/**", async (route) => {
     const request = route.request();
     const path = new URL(request.url()).pathname;
@@ -147,11 +147,26 @@ async function mockApi(page, { isPlatformAdmin = true } = {}) {
       return;
     }
     if (
-      path ===
-        "/api/v1/integrations/github/16161616-1616-4616-8616-161616161616" &&
+      path === "/api/v1/integrations/github/connect" &&
+      request.method() === "POST"
+    ) {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          data: {
+            authorizationUrl:
+              "https://github.com/login/oauth/authorize?client_id=Iv1.test&state=test-state",
+          },
+        }),
+      });
+      return;
+    }
+    if (
+      path === "/api/v1/integrations/github/user" &&
       request.method() === "DELETE"
     ) {
-      githubConnected = false;
+      githubUserConnected = false;
       await route.fulfill({ status: 204, body: "" });
       return;
     }
@@ -532,15 +547,24 @@ async function mockApi(page, { isPlatformAdmin = true } = {}) {
           : [],
       },
       "/api/v1/integrations/github": {
-        data: githubConnected
-          ? [
-              {
-                id: "16161616-1616-4616-8616-161616161616",
-                displayName: "NextarchStudio",
-                repositories: 12,
-              },
-            ]
-          : [],
+        data: [
+          {
+            id: "16161616-1616-4616-8616-161616161616",
+            installationId: "12345678",
+            displayName: "NextarchStudio",
+            repositories: 12,
+          },
+        ],
+        meta: {
+          organization: "NextarchStudio",
+          userConnection: githubUserConnected
+            ? {
+                id: "18181818-1818-4818-8818-181818181818",
+                githubLogin: "LegacyAngel2K9",
+                repositories: 7,
+              }
+            : null,
+        },
       },
       "/api/v1/panel/deployments": {
         data: [
@@ -938,16 +962,40 @@ test("workspace connections can be disconnected from settings", async ({
 
   const githubRequest = page.waitForRequest(
     (request) =>
-      new URL(request.url()).pathname ===
-        "/api/v1/integrations/github/16161616-1616-4616-8616-161616161616" &&
+      new URL(request.url()).pathname === "/api/v1/integrations/github/user" &&
       request.method() === "DELETE",
   );
   await page
-    .getByRole("button", { name: "Disconnect GitHub NextarchStudio" })
+    .getByRole("button", { name: "Disconnect GitHub account LegacyAngel2K9" })
     .click();
   await page.getByRole("alertdialog").getByRole("button", { name: "Disconnect" }).click();
   await githubRequest;
-  await expect(page.getByText("No GitHub account connected.")).toBeVisible();
+  await expect(page.getByText("No GitHub user authorized.")).toBeVisible();
+  await expect(page.getByText("App installed")).toBeVisible();
+});
+
+test("GitHub connection uses user authorization instead of installation update", async ({
+  page,
+}) => {
+  await page.route(
+    "https://github.com/login/oauth/authorize**",
+    async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: "text/html",
+        body: "<h1>GitHub user authorization</h1>",
+      });
+    },
+  );
+  await page.getByRole("link", { name: "Settings" }).click();
+  await page.getByRole("button", { name: "Reconnect GitHub account" }).click();
+  await expect(
+    page.getByRole("heading", { name: "GitHub user authorization" }),
+  ).toBeVisible();
+  const url = new URL(page.url());
+  expect(url.pathname).toBe("/login/oauth/authorize");
+  expect(url.searchParams.has("setup_action")).toBe(false);
+  expect(page.url()).not.toContain("installations/new");
 });
 
 test("administrators can support a customer and create an application in their workspace", async ({

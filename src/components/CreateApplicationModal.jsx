@@ -479,7 +479,8 @@ export function CreateApplicationModal({ open, onClose, onCreated }) {
                 </select>
               </div>
               <small>
-                Refreshed from repositories available to the GitHub App.
+                Refreshed from repositories available to both your GitHub user
+                and the organization App installation.
               </small>
             </label>
             <label>
