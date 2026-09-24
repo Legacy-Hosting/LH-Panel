@@ -14,9 +14,7 @@ export function SettingsPage() {
   const [cloudflare, setCloudflare] = useState([]);
   const [github, setGithub] = useState([]);
   const [githubUser, setGithubUser] = useState(null);
-  const [githubOrganization, setGithubOrganization] = useState(
-    "GitHub organization",
-  );
+  const [githubInstallationUrl, setGithubInstallationUrl] = useState("");
   const [busy, setBusy] = useState("");
   const [error, setError] = useState("");
   const integrationResult = new URLSearchParams(window.location.search).get(
@@ -35,25 +33,17 @@ export function SettingsPage() {
       github_connected: ["success", "GitHub was connected successfully."],
       github_failed: ["error", "GitHub could not be connected."],
       github_denied: ["warning", "GitHub authorization was cancelled."],
-      github_organization_membership_required: [
-        "error",
-        "This GitHub account is not an active member of NextarchStudio.",
-      ],
       github_sso_required: [
         "error",
         "Authorize Legacy Hosting Deployments for your organization SSO, then connect GitHub again.",
       ],
       github_no_repository_access: [
         "error",
-        "This GitHub account has no repositories available through the organization installation.",
+        "This GitHub account has no repositories with both read and write access available to the App.",
       ],
-      github_installation_missing: [
+      github_installation_access_required: [
         "error",
-        "Legacy Hosting Deployments is not installed on NextarchStudio.",
-      ],
-      github_installation_unavailable: [
-        "error",
-        "The NextarchStudio GitHub App installation is unavailable.",
+        "Grant the GitHub App access to your account or an organization, then connect GitHub again.",
       ],
       github_account_already_connected: [
         "error",
@@ -89,8 +79,8 @@ export function SettingsPage() {
         setCloudflare(connections.data);
         setGithub(githubConnections.data);
         setGithubUser(githubConnections.meta?.userConnection || null);
-        setGithubOrganization(
-          githubConnections.meta?.organization || "GitHub organization",
+        setGithubInstallationUrl(
+          githubConnections.meta?.installationUrl || "",
         );
       } catch (caught) {
         if (active) setError(caught.message || "Could not load settings");
@@ -146,6 +136,7 @@ export function SettingsPage() {
       if (provider === "github") {
         await panelApi.disconnectGithub();
         setGithubUser(null);
+        setGithub([]);
       } else {
         await panelApi.disconnectCloudflare(connection.id);
         setCloudflare((current) =>
@@ -236,9 +227,9 @@ export function SettingsPage() {
             </div>
           </div>
           <p className="settings-copy">
-            The organization installs the GitHub App once. Your GitHub account
-            is authorized separately, so you only see repositories your user can
-            access through teams or direct permission.
+            Authorize your GitHub user to load personal accounts and organization
+            installations available to you. Only repositories where your user has
+            both read and write access are selectable.
           </p>
           <div className="connection-list">
             {github.map((connection) => (
@@ -246,8 +237,10 @@ export function SettingsPage() {
                 <div>
                   <b>{connection.displayName}</b>
                   <span>
-                    Organization App installation · ID{" "}
-                    {connection.installationId}
+                    {connection.accountType === "User"
+                      ? "Personal account"
+                      : "Organization"}{" "}
+                    · {connection.repositories} writable repositories
                   </span>
                 </div>
                 <div className="connection-actions">
@@ -256,13 +249,11 @@ export function SettingsPage() {
               </div>
             ))}
             {github.length === 0 && (
-              <div className="connection-row">
-                <div>
-                  <b>{githubOrganization}</b>
-                  <span>Organization App installation managed by an owner</span>
-                </div>
-                <span className="connected-pill">Organization managed</span>
-              </div>
+              <p className="settings-empty">
+                {githubUser
+                  ? "No writable repositories are available through your GitHub App installations."
+                  : "Connect your GitHub account to discover available installations."}
+              </p>
             )}
             {githubUser ? (
               <div className="connection-row">
@@ -299,18 +290,31 @@ export function SettingsPage() {
               <p className="settings-empty">No GitHub user authorized.</p>
             )}
           </div>
-          <button
-            className="secondary settings-action"
-            onClick={connectGithub}
-            disabled={busy === "github"}
-          >
-            {busy === "github" ? (
-              <LoaderCircle className="spin" size={16} />
-            ) : (
-              <GitBranch size={16} />
+          <div className="settings-actions">
+            <button
+              className="secondary settings-action"
+              onClick={connectGithub}
+              disabled={busy === "github"}
+            >
+              {busy === "github" ? (
+                <LoaderCircle className="spin" size={16} />
+              ) : (
+                <GitBranch size={16} />
+              )}
+              {githubUser ? "Reconnect GitHub account" : "Connect GitHub account"}
+            </button>
+            {githubInstallationUrl && (
+              <a
+                className="secondary settings-action"
+                href={githubInstallationUrl}
+                target="_blank"
+                rel="noreferrer"
+              >
+                <ExternalLink size={16} />
+                Grant repository access
+              </a>
             )}
-            {githubUser ? "Reconnect GitHub account" : "Connect GitHub account"}
-          </button>
+          </div>
         </section>
       </div>
     </div>

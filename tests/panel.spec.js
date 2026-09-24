@@ -552,11 +552,20 @@ async function mockApi(page, { isPlatformAdmin = true } = {}) {
             id: "16161616-1616-4616-8616-161616161616",
             installationId: "12345678",
             displayName: "NextarchStudio",
+            accountType: "Organization",
             repositories: 12,
+          },
+          {
+            id: "17171717-1717-4717-8717-171717171717",
+            installationId: "23456789",
+            displayName: "LegacyAngel2K9",
+            accountType: "User",
+            repositories: 4,
           },
         ],
         meta: {
-          organization: "NextarchStudio",
+          installationUrl:
+            "https://github.com/apps/legacy-hosting-deployments/installations/new",
           userConnection: githubUserConnected
             ? {
                 id: "18181818-1818-4818-8818-181818181818",
@@ -985,7 +994,9 @@ test("workspace connections can be disconnected from settings", async ({
   await page.getByRole("alertdialog").getByRole("button", { name: "Disconnect" }).click();
   await githubRequest;
   await expect(page.getByText("No GitHub user authorized.")).toBeVisible();
-  await expect(page.getByText("App installed")).toBeVisible();
+  await expect(
+    page.getByText("Connect your GitHub account to discover available installations."),
+  ).toBeVisible();
 });
 
 test("GitHub connection uses user authorization instead of installation update", async ({
@@ -1002,6 +1013,16 @@ test("GitHub connection uses user authorization instead of installation update",
     },
   );
   await page.getByRole("link", { name: "Settings" }).click();
+  const grantAccess = page.getByRole("link", {
+    name: "Grant repository access",
+  });
+  await expect(grantAccess).toHaveAttribute(
+    "href",
+    "https://github.com/apps/legacy-hosting-deployments/installations/new",
+  );
+  expect(await grantAccess.getAttribute("href")).not.toContain(
+    "setup_action=update",
+  );
   await page.getByRole("button", { name: "Reconnect GitHub account" }).click();
   await expect(
     page.getByRole("heading", { name: "GitHub user authorization" }),

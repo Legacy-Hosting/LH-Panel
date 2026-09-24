@@ -1463,6 +1463,15 @@ footer a:hover {
 .settings-action {
   width: 100%;
 }
+.settings-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.settings-actions a.settings-action {
+  justify-content: center;
+  text-decoration: none;
+}
 .settings-action:disabled {
   opacity: 0.55;
   cursor: not-allowed;
