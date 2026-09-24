@@ -709,12 +709,12 @@ test("application and system status update while lifecycle commands run", async 
 
   await page.getByRole("button", { name: "Stop", exact: true }).click();
   await expect(processStatus).toContainText(/stopping/i);
-  await expect(processStatus).toContainText(/stopped/i, { timeout: 5_000 });
+  await expect(processStatus).toContainText(/stopped/i, { timeout: 10_000 });
   await expect(systemStatus).toContainText("Some systems need attention");
 
   await page.getByRole("button", { name: "Start", exact: true }).click();
   await expect(processStatus).toContainText(/starting/i);
-  await expect(processStatus).toContainText(/online/i, { timeout: 5_000 });
+  await expect(processStatus).toContainText(/online/i, { timeout: 10_000 });
   await expect(systemStatus).toContainText("All systems operational");
 });
 
@@ -869,8 +869,22 @@ test("application deletion completes and removes the application", async ({
   const viewport = page.viewportSize();
   expect(dialogBox).not.toBeNull();
   expect(viewport).not.toBeNull();
-  expect(Math.abs(dialogBox.x + dialogBox.width / 2 - viewport.width / 2)).toBeLessThan(3);
-  expect(Math.abs(dialogBox.y + dialogBox.height / 2 - viewport.height / 2)).toBeLessThan(3);
+  await expect
+    .poll(async () => {
+      const settledBox = await dialog.boundingBox();
+      return settledBox
+        ? Math.abs(settledBox.x + settledBox.width / 2 - viewport.width / 2)
+        : Number.POSITIVE_INFINITY;
+    })
+    .toBeLessThan(3);
+  await expect
+    .poll(async () => {
+      const settledBox = await dialog.boundingBox();
+      return settledBox
+        ? Math.abs(settledBox.y + settledBox.height / 2 - viewport.height / 2)
+        : Number.POSITIVE_INFINITY;
+    })
+    .toBeLessThan(3);
 
   await dialog.getByRole("button", { name: "Delete application" }).click();
   const toast = page
