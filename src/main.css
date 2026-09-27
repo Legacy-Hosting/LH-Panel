@@ -107,12 +107,8 @@ aside {
   width: 30px;
   flex: 0 0 auto;
   border-radius: 9px;
-  background: var(--purple);
-  color: white;
-  display: grid;
-  place-items: center;
-  font-family: "Space Grotesk";
-  font-weight: 700;
+  display: block;
+  object-fit: cover;
 }
 .brand strong {
   display: block;

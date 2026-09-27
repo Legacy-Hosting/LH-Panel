@@ -317,7 +317,7 @@ function AuthScreen({ registration, startupError, allowSso, onAuthenticated }) {
     <div className="auth-page">
       <section className="auth-intro">
         <div className="auth-brand">
-          <div className="mark">L</div>
+          <img className="mark" src="/favicon-192.png" alt="Legacy Hosting logo" />
           <div>
             <strong>Legacy Hosting</strong>
             <span>Control panel</span>

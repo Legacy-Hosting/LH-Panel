@@ -426,7 +426,7 @@ function App() {
     <div className="shell">
       <aside>
         <div className="brand">
-          <div className="mark">L</div>
+          <img className="mark" src="/favicon-192.png" alt="Legacy Hosting logo" />
           <div>
             <strong>Legacy Hosting</strong>
             <span>Control panel</span>
