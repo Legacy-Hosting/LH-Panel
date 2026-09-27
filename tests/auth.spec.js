@@ -69,6 +69,56 @@ test("administrator registration fits mobile width without horizontal overflow",
   await expect(page.getByRole("button", { name: "Create passkey" })).toBeVisible();
 });
 
+test("the login screen starts SSO through the API", async ({ page }) => {
+  await page.unroute("http://localhost:8080/api/v1/**");
+  await page.route("http://localhost:8080/api/v1/**", async (route) => {
+    const url = new URL(route.request().url());
+    if (url.pathname === "/api/v1/auth/me") {
+      await route.fulfill({
+        status: 401,
+        contentType: "application/json",
+        body: JSON.stringify({ error: "authentication_required" }),
+      });
+      return;
+    }
+    if (url.pathname === "/api/v1/auth/registration") {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          data: { bootstrapRequired: false, mode: "closed" },
+        }),
+      });
+      return;
+    }
+    if (url.pathname === "/api/v1/auth/oidc/start") {
+      expect(url.searchParams.get("return_to")).toBe("/");
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          data: {
+            authorizationUrl: "http://localhost:8081/auth?state=test-state",
+            expiresIn: 600,
+          },
+        }),
+      });
+      return;
+    }
+    await route.fulfill({ status: 404, body: "{}" });
+  });
+  await page.route("http://localhost:8081/auth?state=test-state", async (route) => {
+    await route.fulfill({ status: 204 });
+  });
+
+  await page.goto("/");
+  const authorization = page.waitForRequest(
+    "http://localhost:8081/auth?state=test-state",
+  );
+  await page.getByRole("button", { name: /Continue with Legacy Hosting SSO/ }).click();
+  await authorization;
+});
+
 test("an authenticated legacy session completes an SSO interaction with a form POST", async ({
   page,
 }) => {

@@ -4,6 +4,8 @@ Customer control panel for Legacy Hosting. The production build is static and ta
 
 During the SSO migration, an authorization request that needs the existing passkey login redirects to Panel with `sso_interaction`. After authentication, Panel asks the API for a one-time ticket and POSTs it to the completion endpoint under the exact `VITE_SSO_ISSUER` origin. SSO and OIDC client secrets remain server-side.
 
+Normal sign-in can start the API-hosted OIDC Authorization Code Flow with PKCE. The static Panel validates the authorization origin before navigation; LH-API owns state, nonce, code exchange, ID-token validation, and the resulting HttpOnly Panel session. The existing passkey button remains available during parallel migration.
+
 ## Development
 
 ```bash

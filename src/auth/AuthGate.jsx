@@ -39,6 +39,8 @@ const messages = {
     "This email is already connected to a different SSO identity. Contact support before continuing.",
   sso_ticket_failed: "SSO could not complete this sign-in. Please try again.",
   sso_unavailable: "SSO is temporarily unavailable. Please try again shortly.",
+  sso_not_configured: "SSO is not configured yet. Use your passkey or contact support.",
+  sso_failed: "SSO could not complete this sign-in. Please try again or use your passkey.",
   invalid_sso_response: "SSO returned an invalid response. The sign-in was stopped.",
 };
 
@@ -67,6 +69,11 @@ function rememberAvailableTeam(user) {
 function requestedSsoInteraction() {
   const value = new URLSearchParams(window.location.search).get("sso_interaction") || "";
   return /^[A-Za-z0-9_-]{16,255}$/.test(value) ? value : "";
+}
+
+function initialAuthenticationError() {
+  const result = new URLSearchParams(window.location.search).get("auth") || "";
+  return result === "sso_failed" ? messages.sso_failed : "";
 }
 
 function submitSsoTicket(interactionUid, data) {
@@ -103,7 +110,7 @@ export function AuthGate({ children }) {
   const interactionUid = requestedSsoInteraction();
   const [user, setUser] = useState(undefined);
   const [registration, setRegistration] = useState(null);
-  const [startupError, setStartupError] = useState("");
+  const [startupError, setStartupError] = useState(initialAuthenticationError);
   const [continuationError, setContinuationError] = useState("");
 
   async function continueSso() {
@@ -166,6 +173,7 @@ export function AuthGate({ children }) {
       <AuthScreen
         registration={registration}
         startupError={startupError}
+        allowSso={!interactionUid}
         onAuthenticated={auth.refresh}
       />
     );
@@ -206,7 +214,7 @@ function SsoContinuationError({ error, onRetry }) {
   );
 }
 
-function AuthScreen({ registration, startupError, onAuthenticated }) {
+function AuthScreen({ registration, startupError, allowSso, onAuthenticated }) {
   const invitationToken =
     new URLSearchParams(window.location.search).get("invite") || "";
   const canRegister = Boolean(
@@ -221,7 +229,27 @@ function AuthScreen({ registration, startupError, onAuthenticated }) {
   const [displayName, setDisplayName] = useState("");
   const [bootstrapToken, setBootstrapToken] = useState("");
   const [busy, setBusy] = useState(false);
+  const [ssoBusy, setSsoBusy] = useState(false);
   const [error, setError] = useState(startupError);
+
+  async function loginWithSso() {
+    setSsoBusy(true);
+    setError("");
+    try {
+      const destination = new URL(window.location.href);
+      destination.searchParams.delete("auth");
+      const returnTo = `${destination.pathname}${destination.search}${destination.hash}`;
+      const response = await panelApi.startSso(returnTo);
+      const authorizationUrl = new URL(response.data.authorizationUrl);
+      if (authorizationUrl.origin !== new URL(SSO_ISSUER).origin) {
+        throw new Error("invalid_sso_response");
+      }
+      window.location.assign(authorizationUrl.toString());
+    } catch (caught) {
+      setError(errorMessage(caught));
+      setSsoBusy(false);
+    }
+  }
 
   async function login(event) {
     event.preventDefault();
@@ -320,6 +348,24 @@ function AuthScreen({ registration, startupError, onAuthenticated }) {
             <div className="auth-error" role="alert">
               {error}
             </div>
+          )}
+          {view === "login" && allowSso && !registration?.bootstrapRequired && (
+            <>
+              <button
+                type="button"
+                className="auth-submit"
+                disabled={ssoBusy || busy}
+                onClick={loginWithSso}
+              >
+                {ssoBusy ? (
+                  <LoaderCircle className="spin" size={18} />
+                ) : (
+                  <ShieldCheck size={18} />
+                )}{" "}
+                Continue with Legacy Hosting SSO <ArrowRight size={17} />
+              </button>
+              <div className="auth-divider"><span>or use your existing passkey</span></div>
+            </>
           )}
           {view === "login" ? (
             <form onSubmit={login}>

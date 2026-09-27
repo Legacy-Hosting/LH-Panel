@@ -233,6 +233,8 @@ export const panelApi = {
       method: "POST",
       body: JSON.stringify({ interactionUid }),
     }),
+  startSso: (returnTo = "/") =>
+    request(`/auth/oidc/start?${new URLSearchParams({ return_to: returnTo })}`),
   logout: async () => {
     const response = await request("/auth/logout", { method: "POST" });
     csrfToken = "";

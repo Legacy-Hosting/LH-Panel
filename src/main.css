@@ -1235,6 +1235,7 @@ footer a:hover {
   white-space: nowrap;
 }
 .auth-submit {
+  width: 100%;
   height: 44px;
   border-radius: 9px;
   background: var(--purple);
@@ -1257,6 +1258,26 @@ footer a:hover {
 .auth-submit:disabled {
   cursor: wait;
   opacity: 0.72;
+}
+.auth-divider {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 19px 0;
+  color: #696b79;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+.auth-divider::before,
+.auth-divider::after {
+  content: "";
+  height: 1px;
+  flex: 1;
+  background: #25262e;
+}
+.auth-divider span {
+  white-space: nowrap;
 }
 .auth-error {
   border: 1px solid rgba(239, 92, 105, 0.35);
