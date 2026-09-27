@@ -351,6 +351,12 @@ export const panelApi = {
     request(`/panel/nodes/${nodeId}`, { method: "DELETE" }),
   rotateNodeToken: (nodeId) =>
     request(`/panel/nodes/${nodeId}/rotate-token`, { method: "POST" }),
+  firewallBans: () => request("/panel/firewall/bans"),
+  unbanFirewallAddress: (ipAddress, reason) =>
+    request("/panel/firewall/bans/unban", {
+      method: "POST",
+      body: JSON.stringify({ ipAddress, reason }),
+    }),
   domains: () => request("/panel/domains"),
   deployments: () => request("/panel/deployments"),
   deploymentLogs: (applicationId, commandId) =>

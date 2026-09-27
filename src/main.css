@@ -2007,6 +2007,77 @@ footer a:hover {
   opacity: 0.45;
   cursor: not-allowed;
 }
+.admin-firewall-heading {
+  gap: 18px;
+}
+.admin-firewall-card {
+  padding: 0;
+  overflow: hidden;
+}
+.firewall-ban-list {
+  display: grid;
+}
+.firewall-ban-row {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: 38px minmax(190px, 1fr) 86px minmax(140px, 0.55fr) 90px auto;
+  align-items: center;
+  gap: 14px;
+  padding: 15px 18px;
+  border-bottom: 1px solid #282932;
+}
+.firewall-ban-row:last-child {
+  border-bottom: 0;
+}
+.firewall-ban-icon {
+  width: 34px;
+  height: 34px;
+  display: grid;
+  place-items: center;
+  border-radius: 9px;
+  color: #8d909e;
+  background: #202129;
+}
+.firewall-ban-icon.active {
+  color: #ff7884;
+  background: rgba(255, 91, 108, 0.1);
+}
+.firewall-ban-address,
+.firewall-ban-detail {
+  min-width: 0;
+  display: grid;
+  gap: 3px;
+}
+.firewall-ban-address b {
+  overflow: hidden;
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.firewall-ban-address small,
+.firewall-ban-detail small {
+  color: var(--muted);
+  font-size: 10px;
+}
+.firewall-ban-detail span {
+  font-size: 11px;
+}
+.user-state.blocked {
+  color: #ff7884;
+  background: rgba(255, 91, 108, 0.1);
+}
+.firewall-unban {
+  min-width: 96px;
+}
+@media (max-width: 1050px) {
+  .firewall-ban-row {
+    grid-template-columns: 38px minmax(180px, 1fr) 86px minmax(130px, 0.55fr) auto;
+  }
+  .firewall-ban-activations {
+    display: none;
+  }
+}
 @media (max-width: 1000px) {
   .admin-user-row {
     grid-template-columns: 38px minmax(150px, 1fr) minmax(170px, 0.8fr) auto;
@@ -2029,6 +2100,21 @@ footer a:hover {
   }
   .admin-user-team,
   .support-view-button {
+    grid-column: 1 / -1;
+    width: 100%;
+  }
+  .admin-firewall-heading {
+    align-items: stretch;
+    flex-direction: column;
+  }
+  .firewall-ban-row {
+    grid-template-columns: 34px minmax(0, 1fr) auto;
+    gap: 10px;
+  }
+  .firewall-ban-detail {
+    display: none;
+  }
+  .firewall-unban {
     grid-column: 1 / -1;
     width: 100%;
   }

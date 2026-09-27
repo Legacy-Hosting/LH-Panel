@@ -69,6 +69,22 @@ async function mockApi(page, { isPlatformAdmin = true } = {}) {
   let lifecycleCommandReads = 0;
   let cloudflareConnected = true;
   let githubUserConnected = true;
+  let firewallBans = [
+    {
+      ipAddress: "8.8.8.8",
+      addressFamily: "ipv4",
+      active: true,
+      sourceNodeId: "44444444-4444-4444-8444-444444444444",
+      sourceNodeName: "ams3-web-01",
+      sourceJail: "sshd",
+      reason: "Fail2Ban sshd ban",
+      activationCount: 1,
+      firstReportedAt: "2026-09-27T10:00:00.000Z",
+      lastReportedAt: "2026-09-27T10:00:00.000Z",
+      removedAt: null,
+      removalReason: null,
+    },
+  ];
   await page.route(apiRoute, async (route) => {
     const request = route.request();
     const path = new URL(request.url()).pathname;
@@ -99,6 +115,23 @@ async function mockApi(page, { isPlatformAdmin = true } = {}) {
         status: 201,
         contentType: "application/json",
         body: JSON.stringify({ data: { agent: nodeAgent } }),
+      });
+      return;
+    }
+    if (
+      path === "/api/v1/panel/firewall/bans/unban" &&
+      request.method() === "POST"
+    ) {
+      const { ipAddress } = request.postDataJSON();
+      firewallBans = firewallBans.map((ban) =>
+        ban.ipAddress === ipAddress
+          ? { ...ban, active: false, removedAt: new Date().toISOString() }
+          : ban,
+      );
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({ data: { ipAddress, active: false } }),
       });
       return;
     }
@@ -504,6 +537,7 @@ async function mockApi(page, { isPlatformAdmin = true } = {}) {
           },
         ],
       },
+      "/api/v1/panel/firewall/bans": { data: firewallBans },
       "/api/v1/panel/application-targets": {
         data: [
           {
@@ -1146,6 +1180,39 @@ test("administrators can support a customer and create an application in their w
   await adminUsers;
   await expect(page).toHaveURL(/\/admin\/users$/);
   await expect(page.getByRole("link", { name: "Admin", exact: true })).toBeVisible();
+});
+
+test("administrators can remove a shared Fail2Ban address from every server", async ({
+  page,
+}) => {
+  await page.getByRole("link", { name: "Admin", exact: true }).click();
+  await page.getByRole("link", { name: "Firewall", exact: true }).click();
+  await expect(page).toHaveURL(/\/admin\/firewall$/);
+  await expect(page.getByText("8.8.8.8", { exact: true })).toBeVisible();
+  await expect(page.getByText("ams3-web-01 · sshd")).toBeVisible();
+
+  const unbanRequest = page.waitForRequest(
+    (request) =>
+      new URL(request.url()).pathname ===
+        "/api/v1/panel/firewall/bans/unban" &&
+      request.method() === "POST",
+  );
+  await page.getByRole("button", { name: "Unban 8.8.8.8" }).click();
+  await page
+    .getByRole("alertdialog")
+    .getByRole("button", { name: "Unban IP address" })
+    .click();
+  const request = await unbanRequest;
+  expect(request.postDataJSON()).toEqual({
+    ipAddress: "8.8.8.8",
+    reason: "Removed in LH-Panel",
+  });
+  await expect(
+    page.getByRole("status").filter({
+      hasText: "8.8.8.8 is being removed from all servers.",
+    }),
+  ).toBeVisible();
+  await expect(page.getByRole("button", { name: "Unban 8.8.8.8" })).toBeDisabled();
 });
 
 test("nodes accept public and private FQDN, IPv4, and IPv6", async ({

@@ -38,6 +38,7 @@ import { WorkspaceSwitcher } from "./components/WorkspaceSwitcher.jsx";
 import { MonitoringPage } from "./pages/MonitoringPage.jsx";
 import { AdminSettingsPage } from "./pages/AdminSettingsPage.jsx";
 import { AdminUsersPage } from "./pages/AdminUsersPage.jsx";
+import { AdminFirewallPage } from "./pages/AdminFirewallPage.jsx";
 import { PANEL_VERSION } from "./version.js";
 import { greetingForHour } from "./greeting.js";
 import {
@@ -101,7 +102,7 @@ function routeFromPathname(pathname = window.location.pathname) {
   }
 
   const adminMatch = normalized.match(
-    /^\/admin(?:\/(nodes|monitoring|users|settings))?$/,
+    /^\/admin(?:\/(nodes|monitoring|firewall|users|settings))?$/,
   );
   if (adminMatch) {
     return { page: "Admin", adminSection: adminMatch[1] || "nodes" };
@@ -833,6 +834,7 @@ function AdminPage({ section, team, onNavigate, onSupport }) {
       label: "Infrastructure monitoring",
       path: "/admin/monitoring",
     },
+    { id: "firewall", label: "Firewall", path: "/admin/firewall" },
     { id: "users", label: "Users", path: "/admin/users" },
     { id: "settings", label: "Platform access", path: "/admin/settings" },
   ];
@@ -856,6 +858,8 @@ function AdminPage({ section, team, onNavigate, onSupport }) {
       </div>
       {section === "monitoring" ? (
         <MonitoringPage team={team} infrastructure />
+      ) : section === "firewall" ? (
+        <AdminFirewallPage />
       ) : section === "users" ? (
         <AdminUsersPage onSupport={onSupport} />
       ) : section === "settings" ? (

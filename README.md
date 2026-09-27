@@ -8,6 +8,11 @@ Normal sign-in can start the API-hosted OIDC Authorization Code Flow with PKCE. 
 
 Sign-out first revokes the HttpOnly Panel session and then follows the API-provided URL only when it matches the configured SSO issuer origin. SSO ends its own browser session and uses signed back-channel logout tokens to revoke remaining Panel and Hub sessions.
 
+Platform administrators can inspect the shared Fail2Ban denylist under
+**Admin → Firewall**. An unban is confirmed explicitly, audited by LH-API, and
+propagated to all online agents; customer and support-context views cannot
+access this infrastructure control.
+
 ## Development
 
 ```bash
