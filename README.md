@@ -6,6 +6,8 @@ During the SSO migration, an authorization request that needs the existing passk
 
 Normal sign-in can start the API-hosted OIDC Authorization Code Flow with PKCE. The static Panel validates the authorization origin before navigation; LH-API owns state, nonce, code exchange, ID-token validation, and the resulting HttpOnly Panel session. The existing passkey button remains available during parallel migration.
 
+Sign-out first revokes the HttpOnly Panel session and then follows the API-provided URL only when it matches the configured SSO issuer origin. SSO ends its own browser session and uses signed back-channel logout tokens to revoke remaining Panel and Hub sessions.
+
 ## Development
 
 ```bash

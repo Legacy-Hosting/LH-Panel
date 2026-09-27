@@ -160,8 +160,16 @@ export function AuthGate({ children }) {
         await continueSso();
       },
       async logout() {
-        await panelApi.logout();
+        const response = await panelApi.logout();
         setUser(null);
+        const logoutUrl = response?.data?.logoutUrl;
+        if (typeof logoutUrl === "string" && logoutUrl) {
+          const destination = new URL(logoutUrl);
+          if (destination.origin !== new URL(SSO_ISSUER).origin) {
+            throw new Error("invalid_sso_response");
+          }
+          window.location.assign(destination.toString());
+        }
       },
     }),
     [user, interactionUid],

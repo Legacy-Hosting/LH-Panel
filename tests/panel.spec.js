@@ -867,6 +867,40 @@ test("logout sends a bodyless request without a JSON content type", async ({
   ).toBeVisible();
 });
 
+test("SSO logout only follows the configured issuer", async ({ page }) => {
+  await page.unroute(apiRoute);
+  await page.route(apiRoute, async (route) => {
+    const path = new URL(route.request().url()).pathname;
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify(
+        path === "/api/v1/auth/logout"
+          ? {
+              data: {
+                logoutUrl:
+                  "http://localhost:8081/session/end?client_id=lh-panel&post_logout_redirect_uri=http%3A%2F%2F127.0.0.1%3A4173%2F",
+              },
+            }
+          : { data: [] },
+      ),
+    });
+  });
+  await page.route("http://localhost:8081/session/end**", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "text/html",
+      body: "<h1>Central sign-out</h1>",
+    });
+  });
+
+  await page.locator('button[title="Sign out"]:visible').click();
+  await expect(page.getByRole("heading", { name: "Central sign-out" })).toBeVisible();
+  const logoutUrl = new URL(page.url());
+  expect(logoutUrl.origin).toBe("http://localhost:8081");
+  expect(logoutUrl.searchParams.get("client_id")).toBe("lh-panel");
+});
+
 test("application deletion completes and removes the application", async ({
   page,
 }) => {
