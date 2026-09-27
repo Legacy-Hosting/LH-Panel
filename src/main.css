@@ -2867,6 +2867,10 @@ footer a:hover {
 .persistent-path-row small {
   display: block;
 }
+
+.background-app-note { min-height: 86px; padding: 16px; border: 1px solid var(--border); border-radius: 12px; background: var(--surface); display: flex; flex-direction: column; justify-content: center; gap: 6px; }
+.background-app-note b { font-size: 13px; }
+.background-app-note small, .internal-application-label { color: var(--muted); font-size: 11px; }
 .persistent-path-row b {
   overflow-wrap: anywhere;
   color: #e0e1e9;

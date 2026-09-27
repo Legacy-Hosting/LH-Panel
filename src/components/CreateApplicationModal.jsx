@@ -272,7 +272,7 @@ export function CreateApplicationModal({ open, onClose, onCreated }) {
     setError("");
     try {
       const processes =
-        form.processMode === "multiple"
+        form.processMode !== "automatic"
           ? form.processes.map((process) => ({
               name: process.name,
               type: process.type,
@@ -302,14 +302,16 @@ export function CreateApplicationModal({ open, onClose, onCreated }) {
         nodeId: form.nodeId,
         repository: form.repository || undefined,
         branch: form.branch,
-        rootDomain: form.rootDomain,
-        domain: applicationHostname(form.domain, form.rootDomain),
+        rootDomain: form.processMode === "background" ? undefined : form.rootDomain,
+        domain: form.processMode === "background"
+          ? undefined
+          : applicationHostname(form.domain, form.rootDomain),
         autoDeploy: form.autoDeploy,
         environment: parseEnvironment(form.environment),
         processes,
-        additionalHostnames: lines(form.additionalHostnames).map((hostname) =>
-          hostname.toLowerCase(),
-        ),
+        additionalHostnames: form.processMode === "background"
+          ? []
+          : lines(form.additionalHostnames).map((hostname) => hostname.toLowerCase()),
         installCommand: parseCommand(form.installCommand),
         buildCommand: parseCommand(form.buildCommand),
         checkCommands: lines(form.checkCommands).map(parseCommand),
@@ -370,7 +372,7 @@ export function CreateApplicationModal({ open, onClose, onCreated }) {
               />
             </div>
           </label>
-          <div className="form-grid">
+          <div className={form.processMode === "background" ? "" : "form-grid"}>
             <label>
               <span>Hosting region</span>
               <div className="select-wrap">
@@ -391,7 +393,7 @@ export function CreateApplicationModal({ open, onClose, onCreated }) {
                 </select>
               </div>
             </label>
-            <label>
+            {form.processMode !== "background" && <label>
               <span>Cloudflare zone</span>
               <div className="select-wrap">
                 <Globe2 size={16} />
@@ -410,9 +412,9 @@ export function CreateApplicationModal({ open, onClose, onCreated }) {
                   ))}
                 </select>
               </div>
-            </label>
+            </label>}
           </div>
-          <label>
+          {form.processMode !== "background" && <label>
             <span>Hostname</span>
             <div className="auth-input hostname-input">
               <Globe2 size={16} />
@@ -441,7 +443,7 @@ export function CreateApplicationModal({ open, onClose, onCreated }) {
               Leave blank to use the zone itself. Enter only a subdomain such
               as <code>app</code> or <code>api.dev</code>.
             </small>
-          </label>
+          </label>}
           <div className="form-grid">
             <label>
               <span>GitHub repository</span>
@@ -501,23 +503,40 @@ export function CreateApplicationModal({ open, onClose, onCreated }) {
             <div className="process-setup-head">
               <div>
                 <h3>PM2 processes</h3>
-                <p>Run one automatically detected process or several services from this repository. Web and API ports are assigned automatically.</p>
+                <p>Run a public web application, several services, or a private background bot.</p>
               </div>
               <label>
                 <span>Process setup</span>
                 <select
                   value={form.processMode}
-                  onChange={(event) =>
-                    setForm({ ...form, processMode: event.target.value })
-                  }
+                  onChange={(event) => {
+                    const processMode = event.target.value;
+                    setForm({
+                      ...form,
+                      processMode,
+                      processes: processMode === "background"
+                        ? [{
+                            ...defaultProcesses[2],
+                            editorId: crypto.randomUUID(),
+                            name: "bot",
+                            type: "bot",
+                            executable: "pnpm",
+                            arguments: "start",
+                          }]
+                        : form.processMode === "background"
+                          ? defaultProcesses
+                          : form.processes,
+                    });
+                  }}
                 >
                   <option value="automatic">Automatic · one process</option>
                   <option value="multiple">Multiple processes</option>
+                  <option value="background">Background · bot or worker</option>
                 </select>
               </label>
             </div>
 
-            {form.processMode === "multiple" && (
+            {form.processMode !== "automatic" && (
               <div className="process-list">
                 {form.processes.map((process, index) => {
                   const usesPort = ["web", "api"].includes(process.type);
@@ -706,7 +725,7 @@ export function CreateApplicationModal({ open, onClose, onCreated }) {
             </div>
             <label><span>Pre-start checks (one command per line)</span><textarea value={form.checkCommands} onChange={(event) => setForm({ ...form, checkCommands: event.target.value })} placeholder={'pnpm lint\npnpm typecheck\npnpm test'} /></label>
             <div className="form-grid">
-              <label><span>Additional hostnames</span><textarea value={form.additionalHostnames} onChange={(event) => setForm({ ...form, additionalHostnames: event.target.value })} placeholder={'bifrost.example.no\nwww.example.com'} /><small>Aliases may use any Cloudflare zone connected to this workspace.</small></label>
+              {form.processMode !== "background" ? <label><span>Additional hostnames</span><textarea value={form.additionalHostnames} onChange={(event) => setForm({ ...form, additionalHostnames: event.target.value })} placeholder={'bifrost.example.no\nwww.example.com'} /><small>Aliases may use any Cloudflare zone connected to this workspace.</small></label> : <div className="background-app-note"><b>No public hostname</b><small>The process is managed by PM2 and monitored directly on its node.</small></div>}
               <label><span>Persistent paths</span><textarea value={form.persistentPaths} onChange={(event) => setForm({ ...form, persistentPaths: event.target.value })} placeholder={'file:V2/var/secrets/settings.key\ndirectory:V2/var/uploads'} /></label>
             </div>
           </section>

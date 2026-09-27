@@ -290,7 +290,7 @@ export function EditApplicationModal({ applicationId, onClose, onUpdated }) {
             {error && <div className="data-error">{error}</div>}
             {application && (
               <div className="application-edit-context">
-                <span>{application.hostname}</span>
+                <span>{application.hostname || "Internal background application"}</span>
                 <b>{application.repository || "Manual application"}</b>
               </div>
             )}

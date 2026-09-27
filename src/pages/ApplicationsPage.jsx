@@ -498,7 +498,7 @@ export function ApplicationsPage({
                 </span>
                 <span>
                   <b>{application.name}</b>
-                  <small>{application.domain}</small>
+                  <small>{application.domain || "Internal application"}</small>
                 </span>
                 <i className={application.status === "Running" ? "green" : "gray"}></i>
               </a>
@@ -521,13 +521,13 @@ export function ApplicationsPage({
                       {label(displayedDetailStatus)}
                     </span>
                   </div>
-                  <a
+                  {detail.hostname ? <a
                     href={`https://${detail.hostname}`}
                     target="_blank"
                     rel="noreferrer"
                   >
                     {detail.hostname} <ExternalLink size={12} />
-                  </a>
+                  </a> : <span className="internal-application-label">Internal background application</span>}
                 </div>
                 {canMutate && (
                   <div className="detail-actions">
@@ -575,10 +575,10 @@ export function ApplicationsPage({
               <div className="detail-facts">
                 {isPlatformAdmin && <div><small>Node</small><b>{detail.nodeName}</b><span>{label(detail.nodeStatus)}</span></div>}
                 {isPlatformAdmin && <div><small>Primary port</small><b>{detail.internalPort || "—"}</b><span>Auto-assigned</span></div>}
-                <div><small>Origin TLS</small><b>{label(detail.proxyStatus)}</b><span>{displayDate(detail.certificateExpiresAt)}</span></div>
+                {detail.hostname && <div><small>Origin TLS</small><b>{label(detail.proxyStatus)}</b><span>{displayDate(detail.certificateExpiresAt)}</span></div>}
                 <div><small>Repository</small><b>{detail.repository || "Manual"}</b><span>{detail.branch}</span></div>
                 <div><small>Processes</small><b>{detail.processes?.length || 1}</b><span>Managed by PM2</span></div>
-                <div><small>Hostnames</small><b>{detail.hostnames?.length || 1}</b><span>Cloudflare + TLS</span></div>
+                <div><small>Hostnames</small><b>{detail.hostnames?.length ?? 0}</b><span>{detail.hostname ? "Cloudflare + TLS" : "Internal only"}</span></div>
               </div>
 
               {detail.processes?.length > 0 && (

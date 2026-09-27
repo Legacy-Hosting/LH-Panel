@@ -109,6 +109,7 @@ function LimitInput({ label, unit, value, onChange, inherited }) {
 }
 
 function ApplicationMonitorCard({ application, canWrite, canManage, onChange, onSave, busy }) {
+  const hasHttpEndpoint = Boolean(application.hostname);
   const updateHealth = (key, value) => onChange({ ...application, health: { ...application.health, [key]: value } });
   const updateLimit = (key, value) => onChange({ ...application, limits: { ...application.limits, [key]: value } });
   const webhook = application.webhook ?? { enabled: false, configured: false, secretConfigured: false };
@@ -117,7 +118,7 @@ function ApplicationMonitorCard({ application, canWrite, canManage, onChange, on
     <section className="settings-card monitor-app-card">
       <div className="monitor-app-head">
         <span className={`health-dot ${application.health.status}`}></span>
-        <div><h3>{application.name}</h3><p>{application.hostname}</p></div>
+        <div><h3>{application.name}</h3><p>{application.hostname || "Internal background application"}</p></div>
         <span className={`health-state ${application.health.status}`}>{application.health.status}</span>
       </div>
       <div className="monitor-usage-strip">
@@ -127,14 +128,14 @@ function ApplicationMonitorCard({ application, canWrite, canManage, onChange, on
         <span>Traffic <b>{application.usage.monthlyTrafficGb.toFixed(2)} GB</b></span>
       </div>
       <div className="health-config-grid">
-        <label className="monitor-check"><input type="checkbox" checked={application.health.enabled} disabled={!canWrite} onChange={(event) => updateHealth("enabled", event.target.checked)} /><span>HTTP health check</span></label>
-        <label className="monitor-field wide-monitor-field"><span>Path</span><input value={application.health.path} disabled={!canWrite} onChange={(event) => updateHealth("path", event.target.value)} /></label>
-        <label className="monitor-field"><span>Interval</span><div className="unit-input"><input type="number" min="15" max="3600" value={application.health.intervalSeconds} disabled={!canWrite} onChange={(event) => updateHealth("intervalSeconds", Number(event.target.value))} /><small>sec</small></div></label>
-        <label className="monitor-field"><span>Timeout</span><div className="unit-input"><input type="number" min="500" max="30000" value={application.health.timeoutMs} disabled={!canWrite} onChange={(event) => updateHealth("timeoutMs", Number(event.target.value))} /><small>ms</small></div></label>
-        <label className="monitor-field"><span>Expected HTTP</span><div className="status-range"><input type="number" min="100" max="599" value={application.health.expectedStatusMin} disabled={!canWrite} onChange={(event) => updateHealth("expectedStatusMin", Number(event.target.value))} /><i>–</i><input type="number" min="100" max="599" value={application.health.expectedStatusMax} disabled={!canWrite} onChange={(event) => updateHealth("expectedStatusMax", Number(event.target.value))} /></div></label>
+        <label className="monitor-check"><input type="checkbox" checked={application.health.enabled} disabled={!canWrite || !hasHttpEndpoint} onChange={(event) => updateHealth("enabled", event.target.checked)} /><span>{hasHttpEndpoint ? "HTTP health check" : "PM2 process monitoring"}</span></label>
+        <label className="monitor-field wide-monitor-field"><span>Path</span><input value={application.health.path} disabled={!canWrite || !hasHttpEndpoint} onChange={(event) => updateHealth("path", event.target.value)} /></label>
+        <label className="monitor-field"><span>Interval</span><div className="unit-input"><input type="number" min="15" max="3600" value={application.health.intervalSeconds} disabled={!canWrite || !hasHttpEndpoint} onChange={(event) => updateHealth("intervalSeconds", Number(event.target.value))} /><small>sec</small></div></label>
+        <label className="monitor-field"><span>Timeout</span><div className="unit-input"><input type="number" min="500" max="30000" value={application.health.timeoutMs} disabled={!canWrite || !hasHttpEndpoint} onChange={(event) => updateHealth("timeoutMs", Number(event.target.value))} /><small>ms</small></div></label>
+        <label className="monitor-field"><span>Expected HTTP</span><div className="status-range"><input type="number" min="100" max="599" value={application.health.expectedStatusMin} disabled={!canWrite || !hasHttpEndpoint} onChange={(event) => updateHealth("expectedStatusMin", Number(event.target.value))} /><i>–</i><input type="number" min="100" max="599" value={application.health.expectedStatusMax} disabled={!canWrite || !hasHttpEndpoint} onChange={(event) => updateHealth("expectedStatusMax", Number(event.target.value))} /></div></label>
       </div>
       <div className="monitor-last-check">
-        Last check: <b>{displayDate(application.health.lastCheckedAt)}</b>
+        {hasHttpEndpoint ? <>Last check: <b>{displayDate(application.health.lastCheckedAt)}</b></> : <>Availability is read directly from the PM2 process on the assigned node.</>}
         {application.health.lastResponseMs !== null && <> · {application.health.lastResponseMs} ms</>}
         {application.health.lastHttpStatus !== null && <> · HTTP {application.health.lastHttpStatus}</>}
         {application.health.lastError && <span>{application.health.lastError}</span>}
