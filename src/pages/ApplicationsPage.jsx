@@ -45,6 +45,12 @@ const runtimeActionStatus = {
   stop: "stopping",
 };
 
+const applicationDetailCache = new Map();
+
+function detailCacheKey(teamId, isPlatformAdmin, applicationId) {
+  return `${teamId || "unknown"}:${isPlatformAdmin ? "admin" : "member"}:${applicationId}`;
+}
+
 function displayedProcessStatus(application, process, transition) {
   if (!process.enabled) return "disabled";
   if (transition) {
@@ -66,17 +72,27 @@ function displayedProcessStatus(application, process, transition) {
 export function ApplicationsPage({
   team,
   isPlatformAdmin,
+  initialApplications = [],
   initialApplicationId,
   refreshKey,
   onEdit,
   onDelete,
   onApplicationSelect,
   onStatusRefresh,
+  onApplicationsLoaded,
 }) {
   const feedback = useFeedback();
-  const [applications, setApplications] = useState([]);
-  const [selectedId, setSelectedId] = useState(initialApplicationId || "");
-  const [detail, setDetail] = useState(null);
+  const initialSelectedId =
+    initialApplicationId || initialApplications[0]?.id || "";
+  const [applications, setApplications] = useState(initialApplications);
+  const [selectedId, setSelectedId] = useState(initialSelectedId);
+  const [detail, setDetail] = useState(() =>
+    initialSelectedId
+      ? applicationDetailCache.get(
+          detailCacheKey(team?.id, isPlatformAdmin, initialSelectedId),
+        ) || null
+      : null,
+  );
   const [logs, setLogs] = useState("");
   const [logStatus, setLogStatus] = useState("");
   const [busy, setBusy] = useState("");
@@ -85,6 +101,7 @@ export function ApplicationsPage({
   const [variable, setVariable] = useState({ key: "", value: "" });
   const [persistentFilePath, setPersistentFilePath] = useState("");
   const streamController = useRef(null);
+  const detailRequest = useRef(0);
   const canMutate = ["owner", "administrator", "developer"].includes(
     team?.role,
   );
@@ -92,6 +109,7 @@ export function ApplicationsPage({
   async function loadApplications(preferredId = selectedId) {
     const response = await panelApi.applications();
     setApplications(response.data);
+    onApplicationsLoaded?.(response.data);
     const nextId =
       response.data.find((application) => application.id === preferredId)?.id ||
       response.data[0]?.id ||
@@ -105,15 +123,30 @@ export function ApplicationsPage({
       setDetail(null);
       return;
     }
+    const requestId = ++detailRequest.current;
     const response = await panelApi.application(applicationId);
+    if (requestId !== detailRequest.current) return;
+    applicationDetailCache.set(
+      detailCacheKey(team?.id, isPlatformAdmin, applicationId),
+      response.data,
+    );
     setDetail(response.data);
   }
 
   async function load() {
     setError("");
     try {
-      const id = await loadApplications(initialApplicationId || selectedId);
-      await loadDetail(id);
+      const preferredId = initialApplicationId || selectedId;
+      const detailPromise = preferredId
+        ? loadDetail(preferredId).then(
+            () => null,
+            (error) => error,
+          )
+        : Promise.resolve(null);
+      const id = await loadApplications(preferredId);
+      const detailError = await detailPromise;
+      if (id !== preferredId) await loadDetail(id);
+      else if (detailError) throw detailError;
       if (id && !initialApplicationId) {
         onApplicationSelect?.(id, { replace: true });
       }
@@ -130,6 +163,12 @@ export function ApplicationsPage({
   }, [refreshKey]);
 
   useEffect(() => {
+    if (!initialApplications.length) return;
+    setApplications(initialApplications);
+    if (!selectedId) setSelectedId(initialApplications[0].id);
+  }, [initialApplications]);
+
+  useEffect(() => {
     if (!initialApplicationId || initialApplicationId === selectedId) return;
     select(initialApplicationId, false);
   }, [initialApplicationId]);
@@ -138,11 +177,16 @@ export function ApplicationsPage({
     if (!selectedId) return undefined;
     const timer = window.setInterval(() => {
       if (document.visibilityState === "hidden") return;
-      Promise.allSettled([
-        loadApplications(selectedId),
-        loadDetail(selectedId),
-      ]);
+      void loadDetail(selectedId).catch(() => undefined);
     }, 5_000);
+    return () => window.clearInterval(timer);
+  }, [selectedId, team?.id]);
+
+  useEffect(() => {
+    const timer = window.setInterval(() => {
+      if (document.visibilityState === "hidden") return;
+      void loadApplications(selectedId).catch(() => undefined);
+    }, 30_000);
     return () => window.clearInterval(timer);
   }, [selectedId, team?.id]);
 
@@ -151,6 +195,11 @@ export function ApplicationsPage({
     setPersistentFilePath("");
     setRuntimeTransition(null);
     setSelectedId(applicationId);
+    setDetail(
+      applicationDetailCache.get(
+        detailCacheKey(team?.id, isPlatformAdmin, applicationId),
+      ) || null,
+    );
     setBusy("");
     setLogs("");
     setLogStatus("");
@@ -459,7 +508,9 @@ export function ApplicationsPage({
 
         <section className="application-detail">
           {!detail ? (
-            <div className="empty-detail">Select an application.</div>
+            <div className="empty-detail">
+              {selectedId ? "Loading application…" : "Select an application."}
+            </div>
           ) : (
             <>
               <div className="application-detail-head">

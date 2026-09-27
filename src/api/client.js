@@ -4,6 +4,10 @@ const API_ROOT = (
 
 let csrfToken = "";
 const SUPPORT_USER_KEY = "lh_support_user_id";
+const inFlightGetRequests = new Map();
+const RETRYABLE_STATUS_CODES = new Set([502, 503, 504]);
+const GET_RETRY_DELAYS_MS = [250, 750];
+const REQUEST_TIMEOUT_MS = 12_000;
 
 function supportUserId() {
   return window.sessionStorage.getItem(SUPPORT_USER_KEY) || "";
@@ -41,16 +45,38 @@ function errorMessage(payload, status) {
 
 async function csrf() {
   if (csrfToken) return csrfToken;
-  const response = await fetch(`${API_ROOT}/auth/csrf`, {
-    credentials: "include",
-  });
-  if (!response.ok) return "";
-  const payload = await response.json();
+  const payload = await request("/auth/csrf");
   csrfToken = payload.data?.token || "";
   return csrfToken;
 }
 
-async function request(path, options = {}) {
+function wait(milliseconds) {
+  return new Promise((resolve) => window.setTimeout(resolve, milliseconds));
+}
+
+async function fetchWithTimeout(url, options) {
+  const controller = new AbortController();
+  const timeout = window.setTimeout(
+    () => controller.abort(),
+    REQUEST_TIMEOUT_MS,
+  );
+  try {
+    return await fetch(url, { ...options, signal: controller.signal });
+  } finally {
+    window.clearTimeout(timeout);
+  }
+}
+
+function apiUnavailableError(cause) {
+  const error = new Error(
+    "The API is temporarily unavailable. Please try again in a moment.",
+    { cause },
+  );
+  error.code = "api_unavailable";
+  return error;
+}
+
+async function executeRequest(path, options = {}) {
   const { headers: optionHeaders, ...requestOptions } = options;
   const teamId = window.localStorage.getItem("lh_active_team");
   const supportId = supportUserId();
@@ -66,17 +92,41 @@ async function request(path, options = {}) {
     !["GET", "HEAD", "OPTIONS"].includes(method) && !unauthenticatedAuth
       ? await csrf()
       : "";
-  const response = await fetch(`${API_ROOT}${path}`, {
-    credentials: "include",
-    ...requestOptions,
-    headers: {
-      ...(hasBody ? { "Content-Type": "application/json" } : {}),
-      ...(teamId ? { "X-Team-ID": teamId } : {}),
-      ...(supportId ? { "X-Support-User-ID": supportId } : {}),
-      ...(requestCsrfToken ? { "X-CSRF-Token": requestCsrfToken } : {}),
-      ...optionHeaders,
-    },
-  });
+  let response;
+  for (let attempt = 0; attempt <= GET_RETRY_DELAYS_MS.length; attempt += 1) {
+    try {
+      response = await fetchWithTimeout(`${API_ROOT}${path}`, {
+        credentials: "include",
+        ...requestOptions,
+        headers: {
+          ...(hasBody ? { "Content-Type": "application/json" } : {}),
+          ...(teamId ? { "X-Team-ID": teamId } : {}),
+          ...(supportId ? { "X-Support-User-ID": supportId } : {}),
+          ...(requestCsrfToken ? { "X-CSRF-Token": requestCsrfToken } : {}),
+          ...optionHeaders,
+        },
+      });
+    } catch (error) {
+      if (method === "GET" && attempt < GET_RETRY_DELAYS_MS.length) {
+        await wait(GET_RETRY_DELAYS_MS[attempt]);
+        continue;
+      }
+      throw apiUnavailableError(error);
+    }
+
+    if (
+      method === "GET" &&
+      RETRYABLE_STATUS_CODES.has(response.status) &&
+      attempt < GET_RETRY_DELAYS_MS.length
+    ) {
+      await response.body?.cancel();
+      await wait(GET_RETRY_DELAYS_MS[attempt]);
+      continue;
+    }
+    break;
+  }
+
+  if (!response) throw apiUnavailableError();
 
   if (!response.ok) {
     const payload = await response
@@ -92,17 +142,41 @@ async function request(path, options = {}) {
   return response.json();
 }
 
+async function request(path, options = {}) {
+  const method = (options.method || "GET").toUpperCase();
+  if (method !== "GET") return executeRequest(path, options);
+
+  const teamId = window.localStorage.getItem("lh_active_team") || "";
+  const key = `${teamId}:${supportUserId()}:${path}`;
+  const existing = inFlightGetRequests.get(key);
+  if (existing) return existing;
+
+  const pending = executeRequest(path, options).finally(() => {
+    if (inFlightGetRequests.get(key) === pending) {
+      inFlightGetRequests.delete(key);
+    }
+  });
+  inFlightGetRequests.set(key, pending);
+  return pending;
+}
+
 async function stream(path, onEvent, signal) {
   const teamId = window.localStorage.getItem("lh_active_team");
   const supportId = supportUserId();
-  const response = await fetch(`${API_ROOT}${path}`, {
-    credentials: "include",
-    headers: {
-      ...(teamId ? { "X-Team-ID": teamId } : {}),
-      ...(supportId ? { "X-Support-User-ID": supportId } : {}),
-    },
-    signal,
-  });
+  let response;
+  try {
+    response = await fetch(`${API_ROOT}${path}`, {
+      credentials: "include",
+      headers: {
+        ...(teamId ? { "X-Team-ID": teamId } : {}),
+        ...(supportId ? { "X-Support-User-ID": supportId } : {}),
+      },
+      signal,
+    });
+  } catch (error) {
+    if (error?.name === "AbortError") throw error;
+    throw apiUnavailableError(error);
+  }
   if (!response.ok || !response.body)
     throw new Error(`Stream request failed with status ${response.status}`);
   const reader = response.body.getReader();

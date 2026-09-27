@@ -217,16 +217,16 @@ function App() {
       setDataError(error.message || "Could not load workspace data");
     }
   }, [selectedTeam?.id]);
-  const loadSystemSummary = useCallback(async () => {
+  const loadSystemSummary = useCallback(async ({ includeApplications = false } = {}) => {
     const teamId = selectedTeam?.id;
     if (!teamId) return;
     try {
       const [applicationResponse, overviewResponse] = await Promise.all([
-        panelApi.applications(),
+        includeApplications ? panelApi.applications() : Promise.resolve(null),
         panelApi.overview(),
       ]);
       if (window.localStorage.getItem("lh_active_team") !== teamId) return;
-      setApps(applicationResponse.data);
+      if (applicationResponse) setApps(applicationResponse.data);
       setStats(overviewResponse.data.stats);
       setSystemStatus(overviewResponse.data.systemStatus);
       setDataError("");
@@ -237,13 +237,16 @@ function App() {
   }, [selectedTeam?.id]);
   useEffect(() => {
     loadDashboard();
+  }, [loadDashboard]);
+  useEffect(() => {
+    if (page !== "Overview") return undefined;
     const timer = window.setInterval(loadDashboard, 30_000);
     return () => window.clearInterval(timer);
-  }, [loadDashboard]);
+  }, [loadDashboard, page]);
   useEffect(() => {
     const timer = window.setInterval(() => {
       if (document.visibilityState !== "hidden") loadSystemSummary();
-    }, 5_000);
+    }, 15_000);
     return () => window.clearInterval(timer);
   }, [loadSystemSummary]);
   async function applicationAction(applicationId, action) {
@@ -264,7 +267,7 @@ function App() {
             queued.data.commandId,
           );
           command = response.data;
-          await loadSystemSummary();
+          await loadSystemSummary({ includeApplications: true });
           if (["succeeded", "failed", "cancelled"].includes(command.status)) break;
           await new Promise((resolve) => window.setTimeout(resolve, 1_000));
         }
@@ -280,7 +283,7 @@ function App() {
       await loadDashboard();
     } catch (error) {
       feedback.error(error.message || "Could not queue application action");
-      await loadSystemSummary();
+      await loadSystemSummary({ includeApplications: true });
     } finally {
       setApplicationTransitions((current) => {
         const next = { ...current };
@@ -583,6 +586,7 @@ function App() {
             <ApplicationsPage
               team={selectedTeam}
               isPlatformAdmin={effectiveIsPlatformAdmin}
+              initialApplications={apps}
               initialApplicationId={route.applicationId}
               refreshKey={applicationRevision}
               onEdit={setEditingApplicationId}
@@ -591,6 +595,7 @@ function App() {
                 navigate(`/applications/${encodeURIComponent(applicationId)}`, options)
               }
               onStatusRefresh={loadSystemSummary}
+              onApplicationsLoaded={setApps}
             />
           ) : page === "Domains" ? (
             <DomainsPage />
