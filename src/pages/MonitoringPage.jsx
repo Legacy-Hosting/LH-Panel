@@ -108,9 +108,11 @@ function LimitInput({ label, unit, value, onChange, inherited }) {
   );
 }
 
-function ApplicationMonitorCard({ application, canWrite, onChange, onSave, busy }) {
+function ApplicationMonitorCard({ application, canWrite, canManage, onChange, onSave, busy }) {
   const updateHealth = (key, value) => onChange({ ...application, health: { ...application.health, [key]: value } });
   const updateLimit = (key, value) => onChange({ ...application, limits: { ...application.limits, [key]: value } });
+  const webhook = application.webhook ?? { enabled: false, configured: false, secretConfigured: false };
+  const updateWebhook = (key, value) => onChange({ ...application, webhook: { ...webhook, [key]: value } });
   return (
     <section className="settings-card monitor-app-card">
       <div className="monitor-app-head">
@@ -142,6 +144,16 @@ function ApplicationMonitorCard({ application, canWrite, onChange, onSave, busy 
         <LimitInput label="Memory override" unit="MB" value={application.limits.memoryMb} inherited={application.effectiveLimits.memoryMb ? `Plan: ${application.effectiveLimits.memoryMb}` : undefined} onChange={(value) => updateLimit("memoryMb", value)} />
         <LimitInput label="Storage override" unit="GB" value={application.limits.storageGb} inherited={application.effectiveLimits.storageGb ? `Plan: ${application.effectiveLimits.storageGb}` : undefined} onChange={(value) => updateLimit("storageGb", value)} />
         <LimitInput label="Traffic override" unit="GB/mo" value={application.limits.monthlyTrafficGb} inherited={application.effectiveLimits.monthlyTrafficGb ? `Plan: ${application.effectiveLimits.monthlyTrafficGb}` : undefined} onChange={(value) => updateLimit("monthlyTrafficGb", value)} />
+      </div>
+      <div className="application-webhook">
+        <div>
+          <h4>Application webhook</h4>
+          <p>Alert events from this application are delivered only to this endpoint.</p>
+        </div>
+        <label className="monitor-check"><input type="checkbox" checked={webhook.enabled} disabled={!canManage} onChange={(event) => updateWebhook("enabled", event.target.checked)} /><span>Signed webhook enabled</span></label>
+        <label className="monitor-field wide-monitor-field"><span>HTTPS endpoint</span><input type="url" disabled={!canManage} placeholder={webhook.configured ? "Webhook configured — leave blank to keep" : "https://hooks.example.com/application"} value={webhook.url ?? ""} onChange={(event) => updateWebhook("url", event.target.value || undefined)} /></label>
+        <label className="monitor-field wide-monitor-field"><span>Signing secret</span><input type="password" minLength="16" disabled={!canManage} placeholder={webhook.secretConfigured ? "Signing secret configured — leave blank to keep" : "Minimum 16 characters"} value={webhook.secret ?? ""} onChange={(event) => updateWebhook("secret", event.target.value || undefined)} /></label>
+        {!canManage && <small>Only owners and administrators can change webhook delivery.</small>}
       </div>
       {canWrite && <button className="secondary monitor-save" onClick={() => onSave(application)} disabled={busy === application.id}>{busy === application.id ? <LoaderCircle className="spin" size={15} /> : <Save size={15} />} Save application monitoring</button>}
     </section>
@@ -241,7 +253,17 @@ export function MonitoringPage({ team, infrastructure = false }) {
   async function saveApplication(application) {
     setBusy(application.id); setError("");
     try {
-      await panelApi.updateApplicationMonitoring(application.id, { health: application.health, limits: application.limits });
+      await panelApi.updateApplicationMonitoring(application.id, {
+        health: application.health,
+        limits: application.limits,
+        ...(canManage ? {
+          webhook: {
+            enabled: Boolean(application.webhook?.enabled),
+            ...(application.webhook?.url !== undefined ? { url: application.webhook.url } : {}),
+            ...(application.webhook?.secret !== undefined ? { secret: application.webhook.secret } : {}),
+          },
+        } : {}),
+      });
       feedback.success(`${application.name} monitoring saved.`);
       const response = await panelApi.monitoredApplications();
       setApplications(response.data);
@@ -303,7 +325,7 @@ export function MonitoringPage({ team, infrastructure = false }) {
       {!infrastructure && <>
         <div className="monitor-section-heading"><div><h2>Application policies</h2><p>Health checks and overrides; empty limits inherit the workspace plan.</p></div></div>
         <div className="monitor-app-grid">
-          {applications.map((application) => <ApplicationMonitorCard key={application.id} application={application} canWrite={canWrite} onChange={updateApplication} onSave={saveApplication} busy={busy} />)}
+          {applications.map((application) => <ApplicationMonitorCard key={application.id} application={application} canWrite={canWrite} canManage={canManage} onChange={updateApplication} onSave={saveApplication} busy={busy} />)}
           {applications.length === 0 && <div className="empty-row">No applications available for monitoring.</div>}
         </div>
       </>}
@@ -342,9 +364,11 @@ export function MonitoringPage({ team, infrastructure = false }) {
             <label><input type="checkbox" checked={settings.panelEnabled} onChange={(event) => setSettings({ ...settings, panelEnabled: event.target.checked })} /> Panel notifications</label>
             <label><input type="checkbox" checked={settings.emailEnabled} onChange={(event) => setSettings({ ...settings, emailEnabled: event.target.checked })} /> Email</label>
             <input type="text" placeholder="ops@example.com, owner@example.com" value={recipientText} onChange={(event) => setRecipientText(event.target.value)} />
-            <label><input type="checkbox" checked={settings.webhookEnabled} onChange={(event) => setSettings({ ...settings, webhookEnabled: event.target.checked })} /> Signed webhook</label>
-            <input type="url" placeholder={settings.webhookConfigured ? "Webhook configured — leave blank to keep" : "https://hooks.example.com/legacy"} value={settings.webhookUrl ?? ""} onChange={(event) => setSettings({ ...settings, webhookUrl: event.target.value || undefined })} />
-            <input type="password" minLength="16" placeholder={settings.webhookSecretConfigured ? "Signing secret configured — leave blank to keep" : "Webhook signing secret (minimum 16 characters)"} value={settings.webhookSecret ?? ""} onChange={(event) => setSettings({ ...settings, webhookSecret: event.target.value || undefined })} />
+            {infrastructure && <>
+              <label><input type="checkbox" checked={settings.webhookEnabled} onChange={(event) => setSettings({ ...settings, webhookEnabled: event.target.checked })} /> Infrastructure webhook</label>
+              <input type="url" placeholder={settings.webhookConfigured ? "Webhook configured — leave blank to keep" : "https://hooks.example.com/infrastructure"} value={settings.webhookUrl ?? ""} onChange={(event) => setSettings({ ...settings, webhookUrl: event.target.value || undefined })} />
+              <input type="password" minLength="16" placeholder={settings.webhookSecretConfigured ? "Signing secret configured — leave blank to keep" : "Webhook signing secret (minimum 16 characters)"} value={settings.webhookSecret ?? ""} onChange={(event) => setSettings({ ...settings, webhookSecret: event.target.value || undefined })} />
+            </>}
           </div>
           {canManage ? <button className="primary monitor-save" disabled={busy === "settings"}>{busy === "settings" ? <LoaderCircle className="spin" size={15} /> : <Save size={15} />} Save monitoring settings</button> : <p className="settings-empty">Only owners and administrators can change workspace rules.</p>}
         </form>}

@@ -3612,6 +3612,31 @@ footer a:hover {
   color: #ff8c9d;
   overflow-wrap: anywhere;
 }
+.application-webhook {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  padding: 16px;
+  border: 1px solid #292a33;
+  border-radius: 10px;
+  background: #0f1015;
+}
+.application-webhook > div:first-child,
+.application-webhook > .monitor-check,
+.application-webhook > small {
+  grid-column: 1 / -1;
+}
+.application-webhook h4 {
+  margin: 0;
+  font: 650 13px "Space Grotesk", sans-serif;
+}
+.application-webhook p,
+.application-webhook > small {
+  margin: 4px 0 0;
+  color: var(--muted);
+  font-size: 10px;
+  line-height: 1.5;
+}
 .monitor-save {
   justify-self: end;
 }

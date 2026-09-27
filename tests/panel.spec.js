@@ -897,6 +897,7 @@ test("logout sends a bodyless request without a JSON content type", async ({
   );
 
   await page.locator('button[title="Sign out"]:visible').click();
+  await page.getByRole("alertdialog").getByRole("button", { name: "Sign out" }).dispatchEvent("click");
   const request = await logoutRequest;
 
   expect(request.headers()["content-type"]).toBeUndefined();
@@ -933,6 +934,7 @@ test("SSO logout only follows the configured issuer", async ({ page }) => {
   });
 
   await page.locator('button[title="Sign out"]:visible').click();
+  await page.getByRole("alertdialog").getByRole("button", { name: "Sign out" }).dispatchEvent("click");
   await expect(page.getByRole("heading", { name: "Central sign-out" })).toBeVisible();
   const logoutUrl = new URL(page.url());
   expect(logoutUrl.origin).toBe(new URL(ssoIssuer).origin);

@@ -346,6 +346,14 @@ function App() {
     }
   }
   async function handleLogout() {
+    const approved = await feedback.confirm({
+      title: "Sign out?",
+      message: "Your control panel and central Legacy Hosting SSO sessions will be closed.",
+      confirmLabel: "Sign out",
+      cancelLabel: "Cancel",
+      tone: "danger",
+    });
+    if (!approved) return;
     try {
       await logout();
       panelApi.clearSupportUser();
