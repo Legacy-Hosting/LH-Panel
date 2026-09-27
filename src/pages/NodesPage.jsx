@@ -18,6 +18,7 @@ export function NodesPage() {
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState({
     name: "",
+    agentMode: "hosting-node",
     publicFqdn: "",
     publicIpv4: "",
     publicIpv6: "",
@@ -305,6 +306,24 @@ export function NodesPage() {
                 />
               </div>
             </label>
+            <label className="wide-field">
+              <span>Agent mode</span>
+              <div className="select-wrap">
+                <select
+                  value={form.agentMode}
+                  onChange={(event) =>
+                    setForm({ ...form, agentMode: event.target.value })
+                  }
+                >
+                  <option value="hosting-node">Hosting node</option>
+                  <option value="monitor-only">Monitor only</option>
+                </select>
+              </div>
+              <small className="field-hint">
+                Monitor-only nodes report health but cannot run customer
+                deployments or infrastructure commands.
+              </small>
+            </label>
           </div>
 
           <section className="node-form-section">
@@ -466,6 +485,11 @@ export function NodesPage() {
               <b>{node.name}</b>
               <span>
                 {node.region || "Unknown region"} · {node.publicFqdn}
+              </span>
+              <span>
+                {node.agentMode === "monitor-only"
+                  ? "Monitor only"
+                  : "Hosting node"}
               </span>
             </div>
             <div className="resource-detail">

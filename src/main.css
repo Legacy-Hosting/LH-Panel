@@ -2074,6 +2074,13 @@ footer a:hover {
   font-size: 12px;
   font-weight: 600;
 }
+.field-hint {
+  display: block;
+  margin-top: 7px;
+  color: var(--muted);
+  font-size: 10px;
+  line-height: 1.45;
+}
 .wide-field {
   grid-column: 1 / -1;
 }
