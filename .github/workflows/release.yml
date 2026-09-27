@@ -35,6 +35,8 @@ jobs:
           VITE_API_URL: https://api.legacyhosting.xyz/api/v1
         run: |
           pnpm install --frozen-lockfile
+          bash -n ops/scripts/*.sh
+          shellcheck --severity=error ops/scripts/*.sh
           pnpm build
           pnpm exec playwright install --with-deps chromium
           pnpm test:e2e
