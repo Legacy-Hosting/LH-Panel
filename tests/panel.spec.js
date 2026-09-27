@@ -1,6 +1,10 @@
 import { expect, test } from "@playwright/test";
 
 const apiRoute = "**/api/v1/**";
+const ssoIssuer = (process.env.VITE_SSO_ISSUER ?? "http://localhost:8081").replace(
+  /\/$/,
+  "",
+);
 
 const team = {
   id: "11111111-1111-4111-8111-111111111111",
@@ -879,14 +883,14 @@ test("SSO logout only follows the configured issuer", async ({ page }) => {
           ? {
               data: {
                 logoutUrl:
-                  "http://localhost:8081/session/end?client_id=lh-panel&post_logout_redirect_uri=http%3A%2F%2F127.0.0.1%3A4173%2F",
+                  `${ssoIssuer}/session/end?client_id=lh-panel&post_logout_redirect_uri=http%3A%2F%2F127.0.0.1%3A4173%2F`,
               },
             }
           : { data: [] },
       ),
     });
   });
-  await page.route("http://localhost:8081/session/end**", async (route) => {
+  await page.route(`${ssoIssuer}/session/end**`, async (route) => {
     await route.fulfill({
       status: 200,
       contentType: "text/html",
@@ -897,7 +901,7 @@ test("SSO logout only follows the configured issuer", async ({ page }) => {
   await page.locator('button[title="Sign out"]:visible').click();
   await expect(page.getByRole("heading", { name: "Central sign-out" })).toBeVisible();
   const logoutUrl = new URL(page.url());
-  expect(logoutUrl.origin).toBe("http://localhost:8081");
+  expect(logoutUrl.origin).toBe(new URL(ssoIssuer).origin);
   expect(logoutUrl.searchParams.get("client_id")).toBe("lh-panel");
 });
 
