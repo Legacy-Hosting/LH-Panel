@@ -17,12 +17,12 @@ pnpm dev
 
 ## Release artifacts
 
-Tags named `v*` run verification and place the immutable archive in `LH-Releases/LH-Panel`. Its SHA-256 checksum is stored separately in `LH-Releases/LH-Panel/SHA256`.
+Tags named `v*` run verification and place the immutable archive in `LH-Releases/LH-Panel`. Its SHA-256 checksum is stored in `SHA256`, and its detached Ed25519 signature is stored in `SIGNATURES`. A release fails closed when `RELEASE_SIGNING_PRIVATE_KEY_B64` is unavailable.
 
 The archive contains the service-owned Nginx, deploy, rollback, and verification scripts. On `ams3-panel-01`, deploy it as root with:
 
 ```bash
-ops/scripts/deploy-release.sh ARCHIVE CHECKSUM VERSION
+ops/scripts/deploy-release.sh ARCHIVE CHECKSUM SIGNATURE VERSION
 ```
 
 Releases are stored below `/opt/legacy-hosting/panel/releases`; the active static build is exposed through `/var/www/legacy-hosting-panel`. The Panel does not require PM2.
