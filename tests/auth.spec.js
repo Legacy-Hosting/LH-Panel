@@ -68,3 +68,65 @@ test("administrator registration fits mobile width without horizontal overflow",
   await page.getByRole("button", { name: "Create passkey" }).scrollIntoViewIfNeeded();
   await expect(page.getByRole("button", { name: "Create passkey" })).toBeVisible();
 });
+
+test("an authenticated legacy session completes an SSO interaction with a form POST", async ({
+  page,
+}) => {
+  const interactionUid = "interaction_uid_123456";
+  await page.unroute("http://localhost:8080/api/v1/**");
+  await page.route("http://localhost:8080/api/v1/**", async (route) => {
+    const path = new URL(route.request().url()).pathname;
+    if (path === "/api/v1/auth/me") {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          data: {
+            id: "123e4567-e89b-12d3-a456-426614174000",
+            email: "user@example.com",
+            displayName: "Example User",
+            isPlatformAdmin: false,
+            teams: [],
+          },
+        }),
+      });
+      return;
+    }
+    if (path === "/api/v1/auth/csrf") {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({ data: { token: "c".repeat(64) } }),
+      });
+      return;
+    }
+    if (path === "/api/v1/auth/sso/continue") {
+      expect(route.request().postDataJSON()).toEqual({ interactionUid });
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          data: {
+            ticket: "t".repeat(43),
+            expiresIn: 60,
+            completionUri: `http://localhost:8081/interaction/${interactionUid}/complete`,
+          },
+        }),
+      });
+      return;
+    }
+    await route.fulfill({ status: 404, body: "{}" });
+  });
+  await page.route(
+    `http://localhost:8081/interaction/${interactionUid}/complete`,
+    async (route) => route.fulfill({ status: 204 }),
+  );
+
+  const completion = page.waitForRequest(
+    (request) => request.url().endsWith(`/interaction/${interactionUid}/complete`),
+  );
+  await page.goto(`/?sso_interaction=${interactionUid}`, { waitUntil: "commit" });
+  const request = await completion;
+  expect(request.method()).toBe("POST");
+  expect(request.postData()).toBe(`ticket=${"t".repeat(43)}`);
+});

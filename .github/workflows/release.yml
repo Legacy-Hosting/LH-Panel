@@ -33,6 +33,7 @@ jobs:
         working-directory: service
         env:
           VITE_API_URL: https://api.legacyhosting.xyz/api/v1
+          VITE_SSO_ISSUER: https://auth.legacyhosting.xyz
         run: |
           pnpm install --frozen-lockfile
           bash -n ops/scripts/*.sh

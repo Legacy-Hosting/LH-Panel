@@ -2,6 +2,8 @@
 
 Customer control panel for Legacy Hosting. The production build is static and talks to `LH-API` through `VITE_API_URL`.
 
+During the SSO migration, an authorization request that needs the existing passkey login redirects to Panel with `sso_interaction`. After authentication, Panel asks the API for a one-time ticket and POSTs it to the completion endpoint under the exact `VITE_SSO_ISSUER` origin. SSO and OIDC client secrets remain server-side.
+
 ## Development
 
 ```bash

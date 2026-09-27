@@ -35,7 +35,16 @@ const messages = {
     "The passkey request expired. Please try again.",
   passkey_verification_failed: "The passkey could not be verified.",
   unknown_passkey: "This passkey is not connected to an account.",
+  sso_identity_conflict:
+    "This email is already connected to a different SSO identity. Contact support before continuing.",
+  sso_ticket_failed: "SSO could not complete this sign-in. Please try again.",
+  sso_unavailable: "SSO is temporarily unavailable. Please try again shortly.",
+  invalid_sso_response: "SSO returned an invalid response. The sign-in was stopped.",
 };
+
+const SSO_ISSUER = (
+  import.meta.env.VITE_SSO_ISSUER || "http://localhost:8081"
+).replace(/\/$/, "");
 
 function errorMessage(error) {
   if (error?.name === "NotAllowedError")
@@ -55,6 +64,35 @@ function rememberAvailableTeam(user) {
   return user;
 }
 
+function requestedSsoInteraction() {
+  const value = new URLSearchParams(window.location.search).get("sso_interaction") || "";
+  return /^[A-Za-z0-9_-]{16,255}$/.test(value) ? value : "";
+}
+
+function submitSsoTicket(interactionUid, data) {
+  const completion = new URL(data.completionUri);
+  const expectedIssuer = new URL(SSO_ISSUER);
+  if (
+    completion.origin !== expectedIssuer.origin ||
+    completion.pathname !== `/interaction/${interactionUid}/complete` ||
+    completion.search ||
+    completion.hash ||
+    !/^[A-Za-z0-9_-]{43}$/.test(data.ticket)
+  ) {
+    throw new Error("invalid_sso_response");
+  }
+  const form = document.createElement("form");
+  form.method = "POST";
+  form.action = completion.toString();
+  const ticket = document.createElement("input");
+  ticket.type = "hidden";
+  ticket.name = "ticket";
+  ticket.value = data.ticket;
+  form.append(ticket);
+  document.body.append(form);
+  form.submit();
+}
+
 export function useAuth() {
   const value = useContext(AuthContext);
   if (!value) throw new Error("useAuth must be used inside AuthGate");
@@ -62,16 +100,32 @@ export function useAuth() {
 }
 
 export function AuthGate({ children }) {
+  const interactionUid = requestedSsoInteraction();
   const [user, setUser] = useState(undefined);
   const [registration, setRegistration] = useState(null);
   const [startupError, setStartupError] = useState("");
+  const [continuationError, setContinuationError] = useState("");
+
+  async function continueSso() {
+    if (!interactionUid) return;
+    setContinuationError("");
+    try {
+      const response = await panelApi.continueSso(interactionUid);
+      submitSsoTicket(interactionUid, response.data);
+    } catch (error) {
+      setContinuationError(errorMessage(error));
+    }
+  }
 
   useEffect(() => {
     let active = true;
     async function load() {
       try {
         const response = await panelApi.me();
-        if (active) setUser(rememberAvailableTeam(response.data));
+        if (active) {
+          setUser(rememberAvailableTeam(response.data));
+          await continueSso();
+        }
       } catch (error) {
         if (!active) return;
         if (error.status !== 401) setStartupError(errorMessage(error));
@@ -96,13 +150,14 @@ export function AuthGate({ children }) {
       async refresh() {
         const response = await panelApi.me();
         setUser(rememberAvailableTeam(response.data));
+        await continueSso();
       },
       async logout() {
         await panelApi.logout();
         setUser(null);
       },
     }),
-    [user],
+    [user, interactionUid],
   );
 
   if (user === undefined) return <AuthLoading />;
@@ -114,16 +169,39 @@ export function AuthGate({ children }) {
         onAuthenticated={auth.refresh}
       />
     );
+  if (interactionUid) {
+    if (continuationError) {
+      return <SsoContinuationError error={continuationError} onRetry={continueSso} />;
+    }
+    return <AuthLoading message="Completing secure sign-in…" />;
+  }
   return <AuthContext.Provider value={auth}>{children}</AuthContext.Provider>;
 }
 
-function AuthLoading() {
+function AuthLoading({ message = "Connecting to Legacy Hosting…" }) {
   return (
     <div className="auth-page">
       <div className="auth-loading">
         <LoaderCircle className="spin" size={24} />
-        <span>Connecting to Legacy Hosting…</span>
+        <span>{message}</span>
       </div>
+    </div>
+  );
+}
+
+function SsoContinuationError({ error, onRetry }) {
+  return (
+    <div className="auth-page">
+      <main className="auth-main">
+        <div className="auth-card">
+          <div className="auth-symbol"><LockKeyhole size={25} /></div>
+          <h2>Could not complete sign-in</h2>
+          <div className="auth-error" role="alert">{error}</div>
+          <button className="auth-submit" onClick={onRetry}>
+            Try again <ArrowRight size={17} />
+          </button>
+        </div>
+      </main>
     </div>
   );
 }

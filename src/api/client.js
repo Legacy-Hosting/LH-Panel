@@ -228,6 +228,11 @@ export const panelApi = {
       method: "POST",
       body: JSON.stringify(body),
     }),
+  continueSso: (interactionUid) =>
+    request("/auth/sso/continue", {
+      method: "POST",
+      body: JSON.stringify({ interactionUid }),
+    }),
   logout: async () => {
     const response = await request("/auth/logout", { method: "POST" });
     csrfToken = "";
