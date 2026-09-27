@@ -1,5 +1,7 @@
 import { expect, test } from "@playwright/test";
 
+const apiRoute = "**/api/v1/**";
+
 const team = {
   id: "11111111-1111-4111-8111-111111111111",
   name: "Nextarch Studio",
@@ -63,7 +65,7 @@ async function mockApi(page, { isPlatformAdmin = true } = {}) {
   let lifecycleCommandReads = 0;
   let cloudflareConnected = true;
   let githubUserConnected = true;
-  await page.route("http://localhost:8080/api/v1/**", async (route) => {
+  await page.route(apiRoute, async (route) => {
     const request = route.request();
     const path = new URL(request.url()).pathname;
     if (

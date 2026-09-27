@@ -1,7 +1,13 @@
 import { expect, test } from "@playwright/test";
 
+const apiRoute = "**/api/v1/**";
+const ssoIssuer = (process.env.VITE_SSO_ISSUER ?? "http://localhost:8081").replace(
+  /\/$/,
+  "",
+);
+
 async function mockRegistration(page) {
-  await page.route("http://localhost:8080/api/v1/**", async (route) => {
+  await page.route(apiRoute, async (route) => {
     const path = new URL(route.request().url()).pathname;
     if (path === "/api/v1/auth/me") {
       await route.fulfill({
@@ -70,8 +76,8 @@ test("administrator registration fits mobile width without horizontal overflow",
 });
 
 test("the login screen starts SSO through the API", async ({ page }) => {
-  await page.unroute("http://localhost:8080/api/v1/**");
-  await page.route("http://localhost:8080/api/v1/**", async (route) => {
+  await page.unroute(apiRoute);
+  await page.route(apiRoute, async (route) => {
     const url = new URL(route.request().url());
     if (url.pathname === "/api/v1/auth/me") {
       await route.fulfill({
@@ -98,7 +104,7 @@ test("the login screen starts SSO through the API", async ({ page }) => {
         contentType: "application/json",
         body: JSON.stringify({
           data: {
-            authorizationUrl: "http://localhost:8081/auth?state=test-state",
+            authorizationUrl: `${ssoIssuer}/auth?state=test-state`,
             expiresIn: 600,
           },
         }),
@@ -107,14 +113,12 @@ test("the login screen starts SSO through the API", async ({ page }) => {
     }
     await route.fulfill({ status: 404, body: "{}" });
   });
-  await page.route("http://localhost:8081/auth?state=test-state", async (route) => {
+  await page.route(`${ssoIssuer}/auth?state=test-state`, async (route) => {
     await route.fulfill({ status: 204 });
   });
 
   await page.goto("/");
-  const authorization = page.waitForRequest(
-    "http://localhost:8081/auth?state=test-state",
-  );
+  const authorization = page.waitForRequest(`${ssoIssuer}/auth?state=test-state`);
   await page.getByRole("button", { name: /Continue with Legacy Hosting SSO/ }).click();
   await authorization;
 });
@@ -123,8 +127,8 @@ test("an authenticated legacy session completes an SSO interaction with a form P
   page,
 }) => {
   const interactionUid = "interaction_uid_123456";
-  await page.unroute("http://localhost:8080/api/v1/**");
-  await page.route("http://localhost:8080/api/v1/**", async (route) => {
+  await page.unroute(apiRoute);
+  await page.route(apiRoute, async (route) => {
     const path = new URL(route.request().url()).pathname;
     if (path === "/api/v1/auth/me") {
       await route.fulfill({
@@ -159,7 +163,7 @@ test("an authenticated legacy session completes an SSO interaction with a form P
           data: {
             ticket: "t".repeat(43),
             expiresIn: 60,
-            completionUri: `http://localhost:8081/interaction/${interactionUid}/complete`,
+            completionUri: `${ssoIssuer}/interaction/${interactionUid}/complete`,
           },
         }),
       });
@@ -168,7 +172,7 @@ test("an authenticated legacy session completes an SSO interaction with a form P
     await route.fulfill({ status: 404, body: "{}" });
   });
   await page.route(
-    `http://localhost:8081/interaction/${interactionUid}/complete`,
+    `${ssoIssuer}/interaction/${interactionUid}/complete`,
     async (route) => route.fulfill({ status: 204 }),
   );
 
