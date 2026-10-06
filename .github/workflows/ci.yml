@@ -33,6 +33,14 @@ jobs:
       - run: pnpm exec playwright install --with-deps chromium
       - run: pnpm test:e2e
       - run: pnpm audit --prod --audit-level high
+      - name: Verify clean release inputs
+        shell: bash
+        run: |
+          if [[ -n $(git status --porcelain --untracked-files=normal) ]]; then
+            git status --short
+            echo "Build and verification must not change release inputs" >&2
+            exit 1
+          fi
       - name: Upload Playwright report on failure
         if: failure()
         uses: actions/upload-artifact@v7

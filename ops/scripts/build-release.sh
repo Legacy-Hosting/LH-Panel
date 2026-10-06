@@ -19,6 +19,7 @@ if [[ $package_version != "$version" ]]; then
   exit 1
 fi
 if [[ -n $(git -C "$repository_root" status --porcelain --untracked-files=normal) ]]; then
+  git -C "$repository_root" status --short >&2
   echo "Release builds require a clean Git worktree" >&2
   exit 1
 fi

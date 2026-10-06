@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.1.3 — 2026-10-06
+
+- Normalize package-manager lock metadata for clean, reproducible Linux release builds.
+- Check that CI leaves release inputs unchanged and report changed paths when the release clean-worktree gate fails.
+- Include the separate-process hostname fixes and dependency security update from 1.1.2, whose release build was blocked before signing or deployment.
+
 ## 1.1.2 — 2026-10-06
 
 - Explain full-hostname requirements for additional public Web/API processes.
