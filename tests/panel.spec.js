@@ -829,6 +829,38 @@ test("application settings can be edited from the overview", async ({ page }) =>
   ).toBeVisible();
 });
 
+test("an additional process can be saved with a separate hostname", async ({ page }) => {
+  await page.getByRole("button", { name: "Edit portal" }).click();
+  const dialog = page.getByRole("dialog", { name: "Edit application" });
+  await dialog.getByRole("button", { name: "Add process" }).click();
+  const process = dialog.locator(".process-card").last();
+  await process.getByLabel("Process name").fill("api");
+  await process.getByRole("combobox", { name: "Type", exact: true }).selectOption("api");
+  await process.getByLabel("Public HTTP routing").check();
+  await process.getByLabel("Routes", { exact: true }).fill("/");
+  await process.getByLabel("Separate hostname (optional)").fill("API.EXAMPLE.COM");
+  const update = page.waitForRequest((request) => request.method() === "PATCH" && new URL(request.url()).pathname.endsWith("/applications/33333333-3333-4333-8333-333333333333"));
+  await dialog.getByRole("button", { name: "Save changes" }).click();
+  const payload = (await update).postDataJSON();
+  expect(payload.processes[1]).toMatchObject({ name: "api", type: "api", primary: false, public: true, hostname: "api.example.com", routes: ["/"] });
+  expect(payload.processes[0]).not.toHaveProperty("hostname");
+  await expect(dialog).not.toBeVisible();
+  await expect(page.getByRole("status").filter({ hasText: "portal was updated" })).toBeVisible();
+});
+
+test("saved settings display a warning when separate hostname provisioning fails", async ({ page }) => {
+  await page.route("**/api/v1/panel/applications/33333333-3333-4333-8333-333333333333", async (route) => {
+    if (route.request().method() !== "PATCH") return route.fallback();
+    await route.fulfill({ json: { data: { updated: true, domains: [{ hostname: "api.example.com", status: "error" }] } } });
+  });
+  await page.getByRole("button", { name: "Edit portal" }).click();
+  const dialog = page.getByRole("dialog", { name: "Edit application" });
+  await expect(dialog.getByLabel("Application name")).toHaveValue("portal");
+  await dialog.getByRole("button", { name: "Save changes" }).click();
+  await expect(page.getByRole("status").filter({ hasText: "DNS/proxy setup failed for api.example.com" })).toBeVisible();
+  await expect(dialog).not.toBeVisible();
+});
+
 test("persistent secret files can be initialized without returning their value", async ({
   page,
 }) => {

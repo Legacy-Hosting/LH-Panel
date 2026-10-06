@@ -235,7 +235,7 @@ export function EditApplicationModal({ applicationId, onClose, onUpdated }) {
           ...(Object.keys(environment).length ? { environment } : {}),
         };
       });
-      await panelApi.updateApplication(applicationId, {
+      const result = await panelApi.updateApplication(applicationId, {
         name: form.name,
         branch: form.branch,
         autoDeploy: form.autoDeploy,
@@ -249,6 +249,13 @@ export function EditApplicationModal({ applicationId, onClose, onUpdated }) {
       feedback.success(
         `${form.name} was updated. Deploy the application to apply runtime changes.`,
       );
+      const failedDomains = (result.data?.domains ?? []).filter((domain) => domain.status === "error");
+      if (failedDomains.length) {
+        feedback.warning(
+          `Settings were saved, but DNS/proxy setup failed for ${failedDomains.map((domain) => domain.hostname).join(", ")}. Check the Cloudflare connection and save again to retry.`,
+          { duration: 12000 },
+        );
+      }
       onClose();
     } catch (caught) {
       const message = caught.message || "Could not update application";
@@ -532,6 +539,7 @@ export function EditApplicationModal({ applicationId, onClose, onUpdated }) {
                                   : "api.example.com"
                               }
                             />
+                            {!process.primary && <small>Use a full hostname in a connected Cloudflare zone. DNS and HTTPS routing are configured when you save an enabled process.</small>}
                           </label>
                         </div>
                       )}

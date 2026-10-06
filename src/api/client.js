@@ -25,6 +25,12 @@ const fieldLabels = {
   region: "Region",
 };
 
+const applicationErrors = {
+  cloudflare_zone_not_connected: "The hostname must belong to a Cloudflare zone connected to this workspace.",
+  application_or_domain_exists: "An application name or hostname is already in use. Choose a different name or hostname.",
+  process_hostname_is_shared_alias: "This hostname is a shared application alias. Choose a different hostname for an independent process.",
+};
+
 function errorMessage(payload, status) {
   const fieldErrors = payload.details?.fieldErrors;
   if (fieldErrors && typeof fieldErrors === "object") {
@@ -38,6 +44,7 @@ function errorMessage(payload, status) {
   if (formError) return formError;
   return (
     payload.message ||
+    applicationErrors[payload.error] ||
     payload.error ||
     `Request failed with status ${status}`
   );
